@@ -11,8 +11,8 @@
  * without an ioBroker running.
  */
 
-import type { ResourceCollection, StateBinding, StateId, StateValue, ValueSpace } from "../model.ts";
-import type { Registry } from "./registry.ts";
+import type { ResourceCollection, StateBinding, StateId, StateValue, ValueSpace } from "../model";
+import type { Registry } from "./registry";
 
 export type { StateValue };
 
@@ -74,7 +74,14 @@ export type Unresolved =
     /** The binding names a collection the registry does not hold. */
     | { readonly reason: "unknown-collection"; readonly collection: string };
 
-export type Options = { readonly ok: true; readonly options: ReadonlyArray<ValueOption> } | ({ readonly ok: false } & Unresolved);
+export type Options =
+    | {
+          readonly ok: true;
+          readonly options: ReadonlyArray<ValueOption>;
+      }
+    | ({
+          readonly ok: false;
+      } & Unresolved);
 
 /**
  * Lists the choices a binding offers.
@@ -140,13 +147,13 @@ function memberOption(member: StateId, collection: ResourceCollection, source: O
     // `transmitters.007` and routes as `007`, but an ATEM input is
     // `inputs.input3` and routes as `3`. Fall back to the segment only when no
     // `valueState` is declared.
-    const value = collection.valueState !== undefined
-        ? source.snapshotOf(`${member}.${collection.valueState}`)?.val ?? segment
-        : segment;
+    const value =
+        collection.valueState !== undefined
+            ? (source.snapshotOf(`${member}.${collection.valueState}`)?.val ?? segment)
+            : segment;
 
-    const name = collection.nameState !== undefined
-        ? source.snapshotOf(`${member}.${collection.nameState}`)?.val
-        : undefined;
+    const name =
+        collection.nameState !== undefined ? source.snapshotOf(`${member}.${collection.nameState}`)?.val : undefined;
 
     return { name: name === undefined || name === null || name === "" ? String(value) : String(name), value };
 }

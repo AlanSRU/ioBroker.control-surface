@@ -1,0 +1,36 @@
+{
+    "i18n": true,
+    "type": "panel",
+    "items": {
+        "_note": {
+            "type": "staticText",
+            "text": "registryNote",
+            "newLine": true,
+            "xs": 12, "sm": 12, "md": 12, "lg": 12, "xl": 12
+        },
+        "resources": {
+            "type": "text",
+            "label": "resources",
+            "help": "resourcesHelp",
+            "minRows": 12,
+            "newLine": true,
+            "xs": 12, "sm": 12, "md": 12, "lg": 12, "xl": 12
+        },
+        "collections": {
+            "type": "text",
+            "label": "collections",
+            "help": "collectionsHelp",
+            "minRows": 5,
+            "newLine": true,
+            "xs": 12, "sm": 12, "md": 12, "lg": 12, "xl": 12
+        },
+        "scenes": {
+            "type": "text",
+            "label": "scenes",
+            "help": "scenesHelp",
+            "minRows": 8,
+            "newLine": true,
+            "xs": 12, "sm": 12, "md": 12, "lg": 12, "xl": 12
+        }
+    }
+}

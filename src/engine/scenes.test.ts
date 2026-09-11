@@ -3,13 +3,12 @@
  * touching a device, which is the whole reason to look for it at load.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { Scene } from "../model.ts";
-import { Registry } from "./registry.ts";
-import { SceneBook } from "./scenes.ts";
-import { allCollections, allMapped } from "../mapping.ts";
+import type { Scene } from "../model";
+import { Registry } from "./registry";
+import { SceneBook } from "./scenes";
+import { allCollections, allMapped } from "../mapping";
 
 const { registry } = Registry.load(allMapped, allCollections);
 
@@ -39,13 +38,13 @@ function reasonsFor(scenes: ReadonlyArray<Scene>): string[] {
     return SceneBook.load(scenes, registry).problems.map(p => p.reason);
 }
 
-test("a scene over declared actions loads cleanly", () => {
+it("a scene over declared actions loads cleanly", () => {
     const { book, problems } = SceneBook.load([sceneOf("presentation.start")], registry);
     assert.deepEqual(problems, []);
     assert.ok(book.get("presentation.start"));
 });
 
-test("an action no resource declares is caught at load", () => {
+it("an action no resource declares is caught at load", () => {
     const reasons = reasonsFor([
         sceneOf("bad", {
             steps: [{ kind: "do", invoke: { resource: "display.lobby", capability: "power", action: "explode" } }],
@@ -54,7 +53,7 @@ test("an action no resource declares is caught at load", () => {
     assert.match(reasons[0]!, /undeclared action "display\.lobby\.power\.explode"/);
 });
 
-test("a wait on undeclared feedback is caught at load", () => {
+it("a wait on undeclared feedback is caught at load", () => {
     const reasons = reasonsFor([
         sceneOf("bad", {
             steps: [
@@ -72,15 +71,13 @@ test("a wait on undeclared feedback is caught at load", () => {
     assert.match(reasons[0]!, /undeclared feedback/);
 });
 
-test("faults inside a parallel branch are found too", () => {
+it("faults inside a parallel branch are found too", () => {
     const reasons = reasonsFor([
         sceneOf("bad", {
             steps: [
                 {
                     kind: "parallel",
-                    steps: [
-                        { kind: "do", invoke: { resource: "nope", capability: "power", action: "on" } },
-                    ],
+                    steps: [{ kind: "do", invoke: { resource: "nope", capability: "power", action: "on" } }],
                 },
             ],
         }),
@@ -88,7 +85,7 @@ test("faults inside a parallel branch are found too", () => {
     assert.match(reasons[0]!, /undeclared action "nope\.power\.on"/);
 });
 
-test("a forward reference to a later scene is legal", () => {
+it("a forward reference to a later scene is legal", () => {
     // Order of declaration must not decide whether a reference works.
     const { problems } = SceneBook.load(
         [sceneOf("first", { steps: [{ kind: "scene", scene: "second" }] }), sceneOf("second")],
@@ -97,12 +94,12 @@ test("a forward reference to a later scene is legal", () => {
     assert.deepEqual(problems, []);
 });
 
-test("a scene that runs itself is refused", () => {
+it("a scene that runs itself is refused", () => {
     const reasons = reasonsFor([sceneOf("loop", { steps: [{ kind: "scene", scene: "loop" }] })]);
     assert.match(reasons[0]!, /scene cycle: loop -> loop/);
 });
 
-test("an indirect cycle is refused", () => {
+it("an indirect cycle is refused", () => {
     const reasons = reasonsFor([
         sceneOf("a", { steps: [{ kind: "scene", scene: "b" }] }),
         sceneOf("b", { steps: [{ kind: "scene", scene: "c" }] }),
@@ -112,7 +109,7 @@ test("an indirect cycle is refused", () => {
     assert.match(reasons[0]!, /scene cycle/);
 });
 
-test("a cycle through a failure fallback is refused", () => {
+it("a cycle through a failure fallback is refused", () => {
     // Harder to spot by eye than a direct call, and loops just as surely.
     const reasons = reasonsFor([
         sceneOf("a", {
@@ -126,13 +123,21 @@ test("a cycle through a failure fallback is refused", () => {
         }),
         sceneOf("b", { steps: [{ kind: "scene", scene: "a" }] }),
     ]);
-    assert.ok(reasons.some(r => /scene cycle/.test(r)), reasons.join("; "));
+    assert.ok(
+        reasons.some(r => /scene cycle/.test(r)),
+        reasons.join("; "),
+    );
 });
 
-test("running the same scene twice in sequence is not a cycle", () => {
+it("running the same scene twice in sequence is not a cycle", () => {
     const { problems } = SceneBook.load(
         [
-            sceneOf("twice", { steps: [{ kind: "scene", scene: "leaf" }, { kind: "scene", scene: "leaf" }] }),
+            sceneOf("twice", {
+                steps: [
+                    { kind: "scene", scene: "leaf" },
+                    { kind: "scene", scene: "leaf" },
+                ],
+            }),
             sceneOf("leaf"),
         ],
         registry,
@@ -140,7 +145,7 @@ test("running the same scene twice in sequence is not a cycle", () => {
     assert.deepEqual(problems, []);
 });
 
-test("a fallback to a scene that does not exist is caught", () => {
+it("a fallback to a scene that does not exist is caught", () => {
     const reasons = reasonsFor([
         sceneOf("a", {
             steps: [
@@ -155,7 +160,7 @@ test("a fallback to a scene that does not exist is caught", () => {
     assert.match(reasons[0]!, /falls back to unknown scene "ghost"/);
 });
 
-test("waits and retries that can never work are caught", () => {
+it("waits and retries that can never work are caught", () => {
     const zeroTimeout = reasonsFor([
         sceneOf("a", {
             steps: [
@@ -186,7 +191,7 @@ test("waits and retries that can never work are caught", () => {
     assert.match(noRetries[0]!, /retries 0 times/);
 });
 
-test("a faulty scene is dropped whole, and the others survive", () => {
+it("a faulty scene is dropped whole, and the others survive", () => {
     const { book, problems } = SceneBook.load(
         [sceneOf("good"), sceneOf("bad", { steps: [{ kind: "scene", scene: "ghost" }] })],
         registry,
@@ -196,7 +201,7 @@ test("a faulty scene is dropped whole, and the others survive", () => {
     assert.equal(problems.length, 1);
 });
 
-test("duplicate scene ids are refused", () => {
+it("duplicate scene ids are refused", () => {
     const reasons = reasonsFor([sceneOf("same"), sceneOf("same")]);
     assert.match(reasons[0]!, /duplicate id/);
 });

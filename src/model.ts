@@ -7,7 +7,7 @@
  * Two rules shape everything here:
  *
  *  1. The device adapter stays the authority for device state. This model holds
- *     *references* into adapter states, never copies of their values.
+ *     references* into adapter states, never copies of their values.
  *  2. Nothing is inferred from `common.role`. Roles are not consistent enough
  *     across adapters to carry semantics — see `docs/architecture/model.md`.
  */
@@ -119,11 +119,23 @@ export interface Capability {
  */
 export type ActionDef =
     /** Write a fixed value. `power.on`, `mute.off`, a momentary button press. */
-    | { readonly kind: "set"; readonly id: string; readonly binding: StateBinding; readonly value: string | number | boolean }
+    | {
+          readonly kind: "set";
+          readonly id: string;
+          readonly binding: StateBinding;
+          readonly value: string | number | boolean;
+      }
     /** Write a caller-supplied value from the capability's value space. */
     | { readonly kind: "select"; readonly id: string; readonly binding: StateBinding }
     /** Numeric set, with optional relative stepping. */
-    | { readonly kind: "level"; readonly id: string; readonly binding: StateBinding; readonly min: number; readonly max: number; readonly step?: number }
+    | {
+          readonly kind: "level";
+          readonly id: string;
+          readonly binding: StateBinding;
+          readonly min: number;
+          readonly max: number;
+          readonly step?: number;
+      }
     /** Invert the bound boolean. */
     | { readonly kind: "toggle"; readonly id: string; readonly binding: StateBinding }
     /**
@@ -247,19 +259,51 @@ export interface Scene {
 }
 
 export type SequenceStep =
-    | { readonly kind: "do"; readonly invoke: ActionInvocation; readonly onFailure?: FailurePolicy }
-    | { readonly kind: "delay"; readonly ms: number }
+    | {
+          readonly kind: "do";
+          readonly invoke: ActionInvocation;
+          readonly onFailure?: FailurePolicy;
+      }
+    | {
+          readonly kind: "delay";
+          readonly ms: number;
+      }
     /** Block until a feedback matches, or give up. */
-    | { readonly kind: "waitFor"; readonly resource: ResourceId; readonly capability: CapabilityId; readonly feedback: string; readonly equals: unknown; readonly timeoutMs: number; readonly onFailure?: FailurePolicy }
-    | { readonly kind: "parallel"; readonly steps: ReadonlyArray<SequenceStep> }
-    | { readonly kind: "scene"; readonly scene: string };
+    | {
+          readonly kind: "waitFor";
+          readonly resource: ResourceId;
+          readonly capability: CapabilityId;
+          readonly feedback: string;
+          readonly equals: unknown;
+          readonly timeoutMs: number;
+          readonly onFailure?: FailurePolicy;
+      }
+    | {
+          readonly kind: "parallel";
+          readonly steps: ReadonlyArray<SequenceStep>;
+      }
+    | {
+          readonly kind: "scene";
+          readonly scene: string;
+      };
 
 export type FailurePolicy =
-    | { readonly kind: "abort" }
-    | { readonly kind: "continue" }
-    | { readonly kind: "retry"; readonly times: number; readonly delayMs: number }
+    | {
+          readonly kind: "abort";
+      }
+    | {
+          readonly kind: "continue";
+      }
+    | {
+          readonly kind: "retry";
+          readonly times: number;
+          readonly delayMs: number;
+      }
     /** Run another scene instead — the backup-projector case. */
-    | { readonly kind: "fallback"; readonly scene: string };
+    | {
+          readonly kind: "fallback";
+          readonly scene: string;
+      };
 
 // ---------------------------------------------------------------------------
 // Surfaces — deliberately absent

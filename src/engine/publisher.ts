@@ -18,11 +18,11 @@
  * Pure, like the rest: it returns a description, and the adapter applies it.
  */
 
-import type { ActionDef, CapabilityId, ResourceId, StateValue } from "../model.ts";
-import type { ObjectSource } from "./resolver.ts";
-import { optionsFor } from "./resolver.ts";
-import { read } from "./feedback.ts";
-import type { Registry } from "./registry.ts";
+import type { ActionDef, CapabilityId, ResourceId, StateValue } from "../model";
+import type { ObjectSource } from "./resolver";
+import { optionsFor } from "./resolver";
+import { read } from "./feedback";
+import type { Registry } from "./registry";
 
 /** Root of the published tree, below the adapter's own namespace. */
 export const ROOT = "resources";
@@ -73,8 +73,11 @@ export interface PublishedState {
     readonly val: StateValue | null;
     /** Always true: this layer is reporting, not commanding. */
     readonly ack: true;
-    readonly q: number;
+    readonly q: Quality;
 }
+
+/** The subset of `STATE_QUALITY` this layer emits, as literals so it type-checks. */
+export type Quality = 0x00 | 0x11 | 0x12 | 0x20 | 0x40;
 
 /** What a write to a published state invokes. */
 export interface ActionTarget {
@@ -243,7 +246,7 @@ export function writeTargets(registry: Registry): ReadonlyMap<string, ActionTarg
  * @param reason - Why the reading is unsound, or undefined when it is not
  * @returns The quality code
  */
-function qualityOf(reason: string | undefined): number {
+function qualityOf(reason: string | undefined): Quality {
     switch (reason) {
         case undefined:
             return QUALITY.good;
@@ -275,12 +278,7 @@ function qualityOf(reason: string | undefined): number {
  * @param source - View of the object tree
  * @returns The `common` block
  */
-function actionCommon(
-    action: ActionDef,
-    readable: boolean,
-    registry: Registry,
-    source: ObjectSource,
-): PublishedCommon {
+function actionCommon(action: ActionDef, readable: boolean, registry: Registry, source: ObjectSource): PublishedCommon {
     const name = action.id;
 
     switch (action.kind) {

@@ -4,19 +4,16 @@
  * so "did nothing, and said why" has to be a first-class outcome.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { ActionInvocation } from "../model.ts";
-import type { StateValue } from "../model.ts";
-import type { Plan, StateWrite } from "./actions.ts";
-import { plan } from "./actions.ts";
-import { Registry } from "./registry.ts";
-import { allCollections, allMapped } from "../mapping.ts";
-import { treeOf } from "./testing.ts";
+import type { ActionInvocation, StateValue } from "../model";
+import type { Plan, StateWrite } from "./actions";
+import { plan } from "./actions";
+import { Registry } from "./registry";
+import { allCollections, allMapped } from "../mapping";
+import { treeOf } from "./testing";
 
 const { registry } = Registry.load(allMapped, allCollections);
-
 
 const empty = treeOf({});
 
@@ -52,17 +49,15 @@ function writesOf(result: Plan): ReadonlyArray<StateWrite> {
  * @returns The invocation
  */
 function invoke(resource: string, capability: string, action: string, value?: StateValue): ActionInvocation {
-    return value === undefined
-        ? { resource, capability, action }
-        : { resource, capability, action, value };
+    return value === undefined ? { resource, capability, action } : { resource, capability, action, value };
 }
 
-test("a set action writes its declared value, unacknowledged", () => {
+it("a set action writes its declared value, unacknowledged", () => {
     const writes = writesOf(plan(invoke("display.lobby", "power", "on"), registry, empty));
     assert.deepEqual(writes, [{ state: "iiyama-prolite.0.power", value: true, ack: false }]);
 });
 
-test("every write is unacknowledged", () => {
+it("every write is unacknowledged", () => {
     // An acked write is read as the device reporting, and adapters ignore it as
     // a command. This must hold for every action kind, not just by convention.
     const cases: ReadonlyArray<ActionInvocation> = [
@@ -77,49 +72,50 @@ test("every write is unacknowledged", () => {
     }
 });
 
-test("a set action ignores a redundant supplied value", () => {
+it("a set action ignores a redundant supplied value", () => {
     const writes = writesOf(plan(invoke("display.lobby", "power", "off", true), registry, empty));
     assert.deepEqual(writes, [{ state: "iiyama-prolite.0.power", value: false, ack: false }]);
 });
 
-test("a write-only ATEM transport button plans without any feedback state", () => {
+it("a write-only ATEM transport button plans without any feedback state", () => {
     // recording.start is read:false; the observable truth is recording.status.
     const writes = writesOf(plan(invoke("atem.recording", "transport", "start"), registry, empty));
     assert.deepEqual(writes, [{ state: "blackmagic-atem.0.recording.start", value: true, ack: false }]);
 });
 
-test("toggle inverts the current value", () => {
+it("toggle inverts the current value", () => {
     const tree = treeOf({ values: { "iiyama-prolite.0.power": true } });
     const writes = writesOf(plan(invoke("display.lobby", "power", "toggle"), registry, tree));
     assert.deepEqual(writes, [{ state: "iiyama-prolite.0.power", value: false, ack: false }]);
 });
 
-test("toggle refuses rather than guesses when nothing has reported", () => {
+it("toggle refuses rather than guesses when nothing has reported", () => {
     // Guessing would be a coin flip that switches equipment during a show.
     const result = plan(invoke("display.lobby", "power", "toggle"), registry, empty);
     assert.deepEqual(result, { ok: false, reason: "unresolved", state: "iiyama-prolite.0.power" });
 });
 
-test("a level is clamped to the declared range", () => {
-    const at = (v: number): StateValue => writesOf(plan(invoke("display.lobby", "volume", "set", v), registry, empty))[0]!.value;
+it("a level is clamped to the declared range", () => {
+    const at = (v: number): StateValue =>
+        writesOf(plan(invoke("display.lobby", "volume", "set", v), registry, empty))[0]!.value;
     assert.equal(at(40), 40);
     assert.equal(at(500), 100);
     assert.equal(at(-20), 0);
 });
 
-test("a level is quantised onto its step", () => {
+it("a level is quantised onto its step", () => {
     // The iiyama volume declares step 1, so fractions land on whole numbers.
     const writes = writesOf(plan(invoke("display.lobby", "volume", "set", 40.4), registry, empty));
     assert.equal(writes[0]!.value, 40);
 });
 
-test("a level with no step keeps fractional values", () => {
+it("a level with no step keeps fractional values", () => {
     // brightness declares min/max but no step.
     const writes = writesOf(plan(invoke("display.lobby", "brightness", "set", 42.5), registry, empty));
     assert.equal(writes[0]!.value, 42.5);
 });
 
-test("a level refuses a non-numeric value", () => {
+it("a level refuses a non-numeric value", () => {
     assert.deepEqual(plan(invoke("display.lobby", "volume", "set", "loud"), registry, empty), {
         ok: false,
         reason: "not-numeric",
@@ -127,30 +123,26 @@ test("a level refuses a non-numeric value", () => {
     });
 });
 
-test("a level with no value refuses rather than defaulting", () => {
+it("a level with no value refuses rather than defaulting", () => {
     assert.deepEqual(plan(invoke("display.lobby", "volume", "set"), registry, empty), {
         ok: false,
         reason: "value-required",
     });
 });
 
-test("a route resolves a source name to the device's own id", () => {
+it("a route resolves a source name to the device's own id", () => {
     const writes = writesOf(plan(invoke("display.stage", "routing", "video", "Laptop"), registry, acmTree));
-    assert.deepEqual(writes, [
-        { state: "blustream-acm.0.receivers.rx3.videoRoute", value: "007", ack: false },
-    ]);
+    assert.deepEqual(writes, [{ state: "blustream-acm.0.receivers.rx3.videoRoute", value: "007", ack: false }]);
 });
 
-test("a broadcast route writes the matrix's own state, not a receiver's", () => {
+it("a broadcast route writes the matrix's own state, not a receiver's", () => {
     // RouteScope "all": one command instead of one per receiver, which at the
     // ACM's 500ms inter-command delay is five seconds saved on ten displays.
     const writes = writesOf(plan(invoke("room1.matrix", "routing", "allVideo", "Laptop"), registry, acmTree));
-    assert.deepEqual(writes, [
-        { state: "blustream-acm.0.system.commands.routeAllVideo", value: "007", ack: false },
-    ]);
+    assert.deepEqual(writes, [{ state: "blustream-acm.0.system.commands.routeAllVideo", value: "007", ack: false }]);
 });
 
-test("a route refuses a source that is not in the value space", () => {
+it("a route refuses a source that is not in the value space", () => {
     assert.deepEqual(plan(invoke("display.stage", "routing", "video", "Nonexistent"), registry, acmTree), {
         ok: false,
         reason: "value-rejected",
@@ -158,7 +150,7 @@ test("a route refuses a source that is not in the value space", () => {
     });
 });
 
-test("an unresolvable value space is reported as unresolved, not as a bad value", () => {
+it("an unresolvable value space is reported as unresolved, not as a bad value", () => {
     // The operator should not be sent hunting for a typo when the adapter is
     // simply down. Same invocation as above, but with an empty object tree.
     assert.deepEqual(plan(invoke("display.stage", "routing", "video", "Laptop"), registry, empty), {
@@ -168,7 +160,7 @@ test("an unresolvable value space is reported as unresolved, not as a bad value"
     });
 });
 
-test("unknown resources, capabilities and actions are told apart", () => {
+it("unknown resources, capabilities and actions are told apart", () => {
     assert.deepEqual(plan(invoke("nope", "power", "on"), registry, empty), {
         ok: false,
         reason: "unknown-resource",
@@ -186,31 +178,25 @@ test("unknown resources, capabilities and actions are told apart", () => {
     });
 });
 
-test("a sky-remote button plans even though nothing can ever read it back", () => {
+it("a sky-remote button plans even though nothing can ever read it back", () => {
     // One-way IR/IP control: the capability has no feedback at all.
     const writes = writesOf(plan(invoke("lounge.skybox", "navigation", "up"), registry, empty));
     assert.deepEqual(writes, [{ state: "sky-remote.0.buttons.up", value: true, ack: false }]);
 });
 
-test("navigating a surface is an ordinary action", () => {
+it("navigating a surface is an ordinary action", () => {
     // A Stream Deck page change goes through the same path as a projector
     // input; there is no surface-specific branch anywhere.
     const writes = writesOf(plan(invoke("surface.reception", "navigation", "page", "matchday"), registry, empty));
-    assert.deepEqual(writes, [
-        { state: "streamdeck.0.decks.reception.currentPageId", value: "matchday", ack: false },
-    ]);
+    assert.deepEqual(writes, [{ state: "streamdeck.0.decks.reception.currentPageId", value: "matchday", ack: false }]);
 });
 
-test("planning never writes to an undeclared state", () => {
+it("planning never writes to an undeclared state", () => {
     // The whitelist property, asserted over every action the mapping declares.
     for (const resource of registry.allResources()) {
         for (const capability of resource.capabilities) {
             for (const action of capability.actions) {
-                const result = plan(
-                    invoke(resource.id, capability.id, action.id, "Laptop"),
-                    registry,
-                    acmTree,
-                );
+                const result = plan(invoke(resource.id, capability.id, action.id, "Laptop"), registry, acmTree);
                 if (result.ok) {
                     for (const write of result.writes) {
                         assert.ok(

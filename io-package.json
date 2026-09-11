@@ -1,0 +1,110 @@
+{
+  "common": {
+    "name": "control-surface",
+    "version": "0.0.1",
+    "news": {
+      "0.0.1": {
+        "en": "initial release",
+        "de": "Erstveröffentlichung",
+        "ru": "Начальная версия",
+        "pt": "lançamento inicial",
+        "nl": "Eerste uitgave",
+        "fr": "Première version",
+        "it": "Versione iniziale",
+        "es": "Versión inicial",
+        "pl": "Pierwsze wydanie",
+        "uk": "Початкова версія",
+        "zh-cn": "首次出版"
+      }
+    },
+    "titleLang": {
+      "en": "Control Surface",
+      "de": "Bedienoberfläche",
+      "ru": "Панель управления",
+      "pt": "Superfície de controle",
+      "nl": "Controle oppervlak",
+      "fr": "Surface de contrôle",
+      "it": "Superficie di controllo",
+      "es": "Superficie de control",
+      "pl": "Powierzchnia kontrolna",
+      "uk": "Контрольна поверхня",
+      "zh-cn": "控制面"
+    },
+    "desc": {
+      "en": "Semantic control and orchestration layer: express what equipment should do without knowing which adapter answers",
+      "de": "Semantische Kontroll- und Orchestrierungsschicht: Drücken Sie aus, was die Ausrüstung tun soll, ohne zu wissen, welcher Adapter antwortet",
+      "ru": "Уровень семантического контроля и оркестровки: укажите, что должно делать оборудование, не зная, какой адаптер отвечает.",
+      "pt": "Camada de controle semântico e orquestração: expresse o que o equipamento deve fazer sem saber qual adaptador responde",
+      "nl": "Semantische controle- en orkestratielaag: geef aan wat apparatuur moet doen zonder te weten welke adapter antwoordt",
+      "fr": "Couche de contrôle sémantique et d'orchestration : exprimer ce que l'équipement doit faire sans savoir quel adaptateur répond",
+      "it": "Livello di controllo semantico e orchestrazione: esprime cosa dovrebbe fare l'apparecchiatura senza sapere quale adattatore risponde",
+      "es": "Capa de orquestación y control semántico: expresa qué debe hacer el equipo sin saber qué adaptador responde",
+      "pl": "Warstwa kontroli semantycznej i orkiestracji: wyrażaj, co sprzęt powinien robić, nie wiedząc, który adapter odpowiada",
+      "uk": "Рівень семантичного керування та оркестровки: вкажіть, що має робити обладнання, не знаючи, який адаптер відповідає",
+      "zh-cn": "语义控制和编排层：在不知道哪个适配器回答的情况下表达设备应该做什么"
+    },
+    "authors": [
+      "Alan Paris <alan.paris@scottish.rugby>"
+    ],
+    "keywords": "av,control,orchestration,semantic,scene,show control,routing,matrix,surface",
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
+    "platform": "Javascript/Node.js",
+    "icon": "control-surface.png",
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/AlanSRU/ioBroker.control-surface/main/admin/control-surface.png",
+    "readme": "https://github.com/AlanSRU/ioBroker.control-surface/blob/main/README.md",
+    "loglevel": "info",
+    "tier": 3,
+    "mode": "daemon",
+    "type": "multimedia",
+    "compact": true,
+    "connectionType": "local",
+    "dataSource": "push",
+    "adminUI": {
+      "config": "json"
+    },
+    "dependencies": [
+      {
+        "js-controller": ">=6.0.11"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=7.0.23"
+      }
+    ],
+    "nogit": true
+  },
+  "native": {
+    "resources": "[]",
+    "collections": "[]",
+    "scenes": "[]"
+  },
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "info",
+      "type": "channel",
+      "common": {
+        "name": "Information"
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connection",
+      "type": "state",
+      "common": {
+        "role": "indicator.connected",
+        "name": "Device or service connected",
+        "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    }
+  ]
+}

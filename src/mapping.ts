@@ -41,19 +41,43 @@ export const iiyamaLobby: Resource = {
             actions: [
                 // The adapter publishes `common.states` on this object, so the
                 // value space needs no duplication here.
-                { kind: "route", id: "select", binding: { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } }, layer: "all" },
+                {
+                    kind: "route",
+                    id: "select",
+                    binding: { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } },
+                    layer: "all",
+                },
             ],
-            feedback: [{ id: "source", binding: { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } }, presentation: "selection" }],
+            feedback: [
+                {
+                    id: "source",
+                    binding: { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } },
+                    presentation: "selection",
+                },
+            ],
         },
         {
             id: "volume",
-            actions: [{ kind: "level", id: "set", binding: { state: "iiyama-prolite.0.volume.main" }, min: 0, max: 100, step: 1 }],
+            actions: [
+                {
+                    kind: "level",
+                    id: "set",
+                    binding: { state: "iiyama-prolite.0.volume.main" },
+                    min: 0,
+                    max: 100,
+                    step: 1,
+                },
+            ],
             feedback: [{ id: "volume", binding: { state: "iiyama-prolite.0.volume.main" }, presentation: "number" }],
         },
         {
             id: "brightness",
-            actions: [{ kind: "level", id: "set", binding: { state: "iiyama-prolite.0.video.brightness" }, min: 0, max: 100 }],
-            feedback: [{ id: "brightness", binding: { state: "iiyama-prolite.0.video.brightness" }, presentation: "number" }],
+            actions: [
+                { kind: "level", id: "set", binding: { state: "iiyama-prolite.0.video.brightness" }, min: 0, max: 100 },
+            ],
+            feedback: [
+                { id: "brightness", binding: { state: "iiyama-prolite.0.video.brightness" }, presentation: "number" },
+            ],
         },
         {
             // Health is a capability like any other, so a surface can dim a
@@ -62,7 +86,11 @@ export const iiyamaLobby: Resource = {
             actions: [],
             feedback: [
                 { id: "online", binding: { state: "iiyama-prolite.0.info.connection" }, presentation: "boolean" },
-                { id: "operatingHours", binding: { state: "iiyama-prolite.0.info.operatingHours" }, presentation: "number" },
+                {
+                    id: "operatingHours",
+                    binding: { state: "iiyama-prolite.0.info.operatingHours" },
+                    presentation: "number",
+                },
             ],
         },
     ],
@@ -82,18 +110,55 @@ export const atlonaSwitcher: Resource = {
             id: "source",
             // Identical shape to the iiyama input select, against a completely
             // different protocol. This is the abstraction working.
-            actions: [{ kind: "route", id: "select", binding: { state: "atlona-sw510w.0.control.input", values: { kind: "objectStates" } }, layer: "all" }],
-            feedback: [{ id: "source", binding: { state: "atlona-sw510w.0.control.input", values: { kind: "objectStates" } }, presentation: "selection" }],
+            actions: [
+                {
+                    kind: "route",
+                    id: "select",
+                    binding: { state: "atlona-sw510w.0.control.input", values: { kind: "objectStates" } },
+                    layer: "all",
+                },
+            ],
+            feedback: [
+                {
+                    id: "source",
+                    binding: { state: "atlona-sw510w.0.control.input", values: { kind: "objectStates" } },
+                    presentation: "selection",
+                },
+            ],
         },
         {
             id: "routing",
             actions: [
-                { kind: "route", id: "hdbaset", binding: { state: "atlona-sw510w.0.control.matrix.hdbasetOutput", values: { kind: "objectStates" } }, layer: "all" },
-                { kind: "route", id: "hdmi", binding: { state: "atlona-sw510w.0.control.matrix.hdmiOutput", values: { kind: "objectStates" } }, layer: "all" },
+                {
+                    kind: "route",
+                    id: "hdbaset",
+                    binding: {
+                        state: "atlona-sw510w.0.control.matrix.hdbasetOutput",
+                        values: { kind: "objectStates" },
+                    },
+                    layer: "all",
+                },
+                {
+                    kind: "route",
+                    id: "hdmi",
+                    binding: { state: "atlona-sw510w.0.control.matrix.hdmiOutput", values: { kind: "objectStates" } },
+                    layer: "all",
+                },
             ],
             feedback: [
-                { id: "hdbaset", binding: { state: "atlona-sw510w.0.control.matrix.hdbasetOutput", values: { kind: "objectStates" } }, presentation: "selection" },
-                { id: "hdmi", binding: { state: "atlona-sw510w.0.control.matrix.hdmiOutput", values: { kind: "objectStates" } }, presentation: "selection" },
+                {
+                    id: "hdbaset",
+                    binding: {
+                        state: "atlona-sw510w.0.control.matrix.hdbasetOutput",
+                        values: { kind: "objectStates" },
+                    },
+                    presentation: "selection",
+                },
+                {
+                    id: "hdmi",
+                    binding: { state: "atlona-sw510w.0.control.matrix.hdmiOutput", values: { kind: "objectStates" } },
+                    presentation: "selection",
+                },
             ],
         },
         {
@@ -138,26 +203,74 @@ export const acmReceiver3: Resource = {
             // could not express breakaway at all; this is why `route` carries
             // a layer rather than a router carrying one source.
             actions: [
-                { kind: "route", id: "all", binding: { state: "blustream-acm.0.receivers.rx3.route", values: { kind: "resourceIds", collection: "room1.sources" } }, layer: "all" },
-                { kind: "route", id: "video", binding: { state: "blustream-acm.0.receivers.rx3.videoRoute", values: { kind: "resourceIds", collection: "room1.sources" } }, layer: "video" },
-                { kind: "route", id: "audio", binding: { state: "blustream-acm.0.receivers.rx3.audioRoute", values: { kind: "resourceIds", collection: "room1.sources" } }, layer: "audio" },
+                {
+                    kind: "route",
+                    id: "all",
+                    binding: {
+                        state: "blustream-acm.0.receivers.rx3.route",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    layer: "all",
+                },
+                {
+                    kind: "route",
+                    id: "video",
+                    binding: {
+                        state: "blustream-acm.0.receivers.rx3.videoRoute",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    layer: "video",
+                },
+                {
+                    kind: "route",
+                    id: "audio",
+                    binding: {
+                        state: "blustream-acm.0.receivers.rx3.audioRoute",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    layer: "audio",
+                },
             ],
             feedback: [
-                { id: "video", binding: { state: "blustream-acm.0.receivers.rx3.videoRoute", values: { kind: "resourceIds", collection: "room1.sources" } }, presentation: "selection" },
-                { id: "audio", binding: { state: "blustream-acm.0.receivers.rx3.audioRoute", values: { kind: "resourceIds", collection: "room1.sources" } }, presentation: "selection" },
+                {
+                    id: "video",
+                    binding: {
+                        state: "blustream-acm.0.receivers.rx3.videoRoute",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    presentation: "selection",
+                },
+                {
+                    id: "audio",
+                    binding: {
+                        state: "blustream-acm.0.receivers.rx3.audioRoute",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    presentation: "selection",
+                },
             ],
         },
         {
             id: "power",
             actions: [{ kind: "toggle", id: "toggle", binding: { state: "blustream-acm.0.receivers.rx3.power" } }],
-            feedback: [{ id: "power", binding: { state: "blustream-acm.0.receivers.rx3.power" }, presentation: "boolean" }],
+            feedback: [
+                { id: "power", binding: { state: "blustream-acm.0.receivers.rx3.power" }, presentation: "boolean" },
+            ],
         },
         {
             id: "health",
             actions: [],
             feedback: [
-                { id: "online", binding: { state: "blustream-acm.0.receivers.rx3.connected" }, presentation: "boolean" },
-                { id: "resolution", binding: { state: "blustream-acm.0.receivers.rx3.resolution" }, presentation: "text" },
+                {
+                    id: "online",
+                    binding: { state: "blustream-acm.0.receivers.rx3.connected" },
+                    presentation: "boolean",
+                },
+                {
+                    id: "resolution",
+                    binding: { state: "blustream-acm.0.receivers.rx3.resolution" },
+                    presentation: "text",
+                },
             ],
         },
     ],
@@ -237,16 +350,43 @@ export const mfpOutput1: Resource = {
     capabilities: [
         {
             id: "routing",
-            actions: [{ kind: "route", id: "audio", binding: { state: "blustream-mfp.0.output.1.audioSource", values: { kind: "objectStates" } }, layer: "audio" }],
-            feedback: [{ id: "audio", binding: { state: "blustream-mfp.0.output.1.audioSource", values: { kind: "objectStates" } }, presentation: "selection" }],
+            actions: [
+                {
+                    kind: "route",
+                    id: "audio",
+                    binding: { state: "blustream-mfp.0.output.1.audioSource", values: { kind: "objectStates" } },
+                    layer: "audio",
+                },
+            ],
+            feedback: [
+                {
+                    id: "audio",
+                    binding: { state: "blustream-mfp.0.output.1.audioSource", values: { kind: "objectStates" } },
+                    presentation: "selection",
+                },
+            ],
         },
         {
             id: "picture",
             actions: [
-                { kind: "level", id: "brightness", binding: { state: "blustream-mfp.0.output.1.brightness" }, min: 0, max: 100 },
-                { kind: "level", id: "contrast", binding: { state: "blustream-mfp.0.output.1.contrast" }, min: 0, max: 100 },
+                {
+                    kind: "level",
+                    id: "brightness",
+                    binding: { state: "blustream-mfp.0.output.1.brightness" },
+                    min: 0,
+                    max: 100,
+                },
+                {
+                    kind: "level",
+                    id: "contrast",
+                    binding: { state: "blustream-mfp.0.output.1.contrast" },
+                    min: 0,
+                    max: 100,
+                },
             ],
-            feedback: [{ id: "brightness", binding: { state: "blustream-mfp.0.output.1.brightness" }, presentation: "number" }],
+            feedback: [
+                { id: "brightness", binding: { state: "blustream-mfp.0.output.1.brightness" }, presentation: "number" },
+            ],
         },
     ],
 };
@@ -266,9 +406,21 @@ export const mfpMicrophone: Resource = {
         {
             id: "microphone",
             actions: [
-                { kind: "level", id: "volume", binding: { state: "blustream-mfp.0.microphone.volume" }, min: 0, max: 100 },
+                {
+                    kind: "level",
+                    id: "volume",
+                    binding: { state: "blustream-mfp.0.microphone.volume" },
+                    min: 0,
+                    max: 100,
+                },
                 { kind: "toggle", id: "mute", binding: { state: "blustream-mfp.0.microphone.mute" } },
-                { kind: "level", id: "rampUp", binding: { state: "blustream-mfp.0.microphone.rampUp" }, min: 0, max: 10 },
+                {
+                    kind: "level",
+                    id: "rampUp",
+                    binding: { state: "blustream-mfp.0.microphone.rampUp" },
+                    min: 0,
+                    max: 10,
+                },
             ],
             feedback: [{ id: "muted", binding: { state: "blustream-mfp.0.microphone.mute" }, presentation: "boolean" }],
         },
@@ -311,10 +463,31 @@ export const atemProgram: Resource = {
     capabilities: [
         {
             id: "source",
-            actions: [{ kind: "route", id: "select", binding: { state: "blackmagic-atem.0.me0.programInput", values: { kind: "resourceIds", collection: "atem.sources" } }, layer: "video" }],
+            actions: [
+                {
+                    kind: "route",
+                    id: "select",
+                    binding: {
+                        state: "blackmagic-atem.0.me0.programInput",
+                        values: { kind: "resourceIds", collection: "atem.sources" },
+                    },
+                    layer: "video",
+                },
+            ],
             feedback: [
-                { id: "source", binding: { state: "blackmagic-atem.0.me0.programInput", values: { kind: "resourceIds", collection: "atem.sources" } }, presentation: "selection" },
-                { id: "inTransition", binding: { state: "blackmagic-atem.0.me0.inTransition" }, presentation: "boolean" },
+                {
+                    id: "source",
+                    binding: {
+                        state: "blackmagic-atem.0.me0.programInput",
+                        values: { kind: "resourceIds", collection: "atem.sources" },
+                    },
+                    presentation: "selection",
+                },
+                {
+                    id: "inTransition",
+                    binding: { state: "blackmagic-atem.0.me0.inTransition" },
+                    presentation: "boolean",
+                },
             ],
         },
     ],
@@ -342,12 +515,25 @@ export const atemRecording: Resource = {
             actions: [
                 { kind: "set", id: "start", binding: { state: "blackmagic-atem.0.recording.start" }, value: true },
                 { kind: "set", id: "stop", binding: { state: "blackmagic-atem.0.recording.stop" }, value: true },
-                { kind: "set", id: "switchDisk", binding: { state: "blackmagic-atem.0.recording.switchDisk" }, value: true },
+                {
+                    kind: "set",
+                    id: "switchDisk",
+                    binding: { state: "blackmagic-atem.0.recording.switchDisk" },
+                    value: true,
+                },
             ],
             feedback: [
-                { id: "status", binding: { state: "blackmagic-atem.0.recording.status", values: { kind: "objectStates" } }, presentation: "selection" },
+                {
+                    id: "status",
+                    binding: { state: "blackmagic-atem.0.recording.status", values: { kind: "objectStates" } },
+                    presentation: "selection",
+                },
                 { id: "duration", binding: { state: "blackmagic-atem.0.recording.duration" }, presentation: "number" },
-                { id: "diskSpace", binding: { state: "blackmagic-atem.0.recording.remainingDiskSpace" }, presentation: "number" },
+                {
+                    id: "diskSpace",
+                    binding: { state: "blackmagic-atem.0.recording.remainingDiskSpace" },
+                    presentation: "number",
+                },
             ],
         },
     ],
@@ -422,14 +608,20 @@ export const receptionPanel: Resource = {
             // `layoutJson` document, not in `common.states`. A value space for
             // this is genuinely unresolved — see `docs/architecture/model.md`.
             actions: [{ kind: "select", id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" } }],
-            feedback: [{ id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" }, presentation: "text" }],
+            feedback: [
+                { id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" }, presentation: "text" },
+            ],
         },
         {
             id: "health",
             actions: [],
             feedback: [
                 { id: "online", binding: { state: "streamdeck.0.decks.reception.connected" }, presentation: "boolean" },
-                { id: "lastSeen", binding: { state: "streamdeck.0.decks.reception.lastHeartbeat" }, presentation: "number" },
+                {
+                    id: "lastSeen",
+                    binding: { state: "streamdeck.0.decks.reception.lastHeartbeat" },
+                    presentation: "number",
+                },
                 { id: "model", binding: { state: "streamdeck.0.decks.reception.model" }, presentation: "text" },
                 { id: "firmware", binding: { state: "streamdeck.0.decks.reception.firmware" }, presentation: "text" },
                 { id: "host", binding: { state: "streamdeck.0.decks.reception.host" }, presentation: "text" },

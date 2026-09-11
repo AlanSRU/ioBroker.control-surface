@@ -14,13 +14,13 @@
  * and ioBroker already has schedules, scripts and Blockly for it.
  */
 
-import type { FailurePolicy, SequenceStep, StateValue } from "../model.ts";
-import type { ObjectSource } from "./resolver.ts";
-import type { Refusal, StateWrite } from "./actions.ts";
-import { plan } from "./actions.ts";
-import { read } from "./feedback.ts";
-import type { Registry } from "./registry.ts";
-import type { SceneBook } from "./scenes.ts";
+import type { FailurePolicy, SequenceStep, StateValue } from "../model";
+import type { ObjectSource } from "./resolver";
+import type { Refusal, StateWrite } from "./actions";
+import { plan } from "./actions";
+import { read } from "./feedback";
+import type { Registry } from "./registry";
+import type { SceneBook } from "./scenes";
 
 /**
  * How often `waitFor` re-reads while waiting.
@@ -105,12 +105,7 @@ type StepOutcome = "next" | "done" | "failed";
  * @param effects - Writes, waits and the object tree
  * @returns What happened
  */
-export async function run(
-    id: string,
-    book: SceneBook,
-    registry: Registry,
-    effects: Effects,
-): Promise<RunReport> {
+export async function run(id: string, book: SceneBook, registry: Registry, effects: Effects): Promise<RunReport> {
     const failures: StepFailure[] = [];
     const completed = await runScene(id, book, registry, effects, failures);
     return { scene: id, completed, failures };

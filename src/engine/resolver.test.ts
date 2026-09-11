@@ -4,14 +4,13 @@
  * resolver handles real value spaces, not tidy ones.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { Options, ValueOption } from "./resolver.ts";
-import { optionsFor, toDevice, toSemantic } from "./resolver.ts";
-import { treeOf } from "./testing.ts";
-import { Registry } from "./registry.ts";
-import { acmTransmitters, atemInputs } from "../mapping.ts";
+import type { Options, ValueOption } from "./resolver";
+import { optionsFor, toDevice, toSemantic } from "./resolver";
+import { treeOf } from "./testing";
+import { Registry } from "./registry";
+import { acmTransmitters, atemInputs } from "../mapping";
 
 const collections = Registry.load([], [acmTransmitters, atemInputs]).registry;
 
@@ -28,17 +27,17 @@ function optionsOf(resolved: Options): ReadonlyArray<ValueOption> {
     return resolved.options;
 }
 
-test("identity space passes values straight through", () => {
+it("identity space passes values straight through", () => {
     const binding = { state: "iiyama-prolite.0.volume.main" };
     assert.deepEqual(optionsFor(binding, collections, treeOf({})), { ok: true, options: [] });
     assert.equal(toDevice(binding, 42, collections, treeOf({})), 42);
 });
 
-test("objectStates on a number state yields numeric values", () => {
+it("objectStates on a number state yields numeric values", () => {
     // iiyama publishes inputSource as a number with common.states.
     const binding = { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } } as const;
     const tree = treeOf({
-        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { "1": "HDMI1", "2": "HDMI2" } } },
+        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { 1: "HDMI1", 2: "HDMI2" } } },
     });
 
     assert.deepEqual(optionsOf(optionsFor(binding, collections, tree)), [
@@ -49,7 +48,7 @@ test("objectStates on a number state yields numeric values", () => {
     assert.equal(toSemantic(binding, 2, collections, tree), "HDMI2");
 });
 
-test("objectStates on a string state keeps zero-padded keys as strings", () => {
+it("objectStates on a string state keeps zero-padded keys as strings", () => {
     // Blustream C66: output.<N>.source is a *string* state. Reading "01" as the
     // number 1 sends a value the device rejects.
     const binding = { state: "blustream-mfp.1.output.1.source", values: { kind: "objectStates" } } as const;
@@ -69,7 +68,7 @@ test("objectStates on a string state keeps zero-padded keys as strings", () => {
     assert.equal(toDevice(binding, "HDMI 6", collections, tree), "06");
 });
 
-test("an absent object is unresolved, not an error", () => {
+it("an absent object is unresolved, not an error", () => {
     // blackmagic-atem rebuilds its tree from the detected model, so a bound
     // state may not exist yet or may vanish on reconnect.
     const binding = { state: "blackmagic-atem.0.recording.status", values: { kind: "objectStates" } } as const;
@@ -83,7 +82,7 @@ test("an absent object is unresolved, not an error", () => {
     assert.equal(toDevice(binding, "recording", collections, treeOf({})), undefined);
 });
 
-test("ATEM inputs route by inputId, not by the object id segment", () => {
+it("ATEM inputs route by inputId, not by the object id segment", () => {
     // The member is `inputs.input3`, but me0.programInput takes the number 3.
     const binding = {
         state: "blackmagic-atem.0.me0.programInput",
@@ -101,7 +100,7 @@ test("ATEM inputs route by inputId, not by the object id segment", () => {
     assert.equal(toDevice(binding, "Camera 3", collections, tree), 3);
 });
 
-test("ACM transmitters keep their zero-padded ids", () => {
+it("ACM transmitters keep their zero-padded ids", () => {
     const binding = {
         state: "blustream-acm.0.receivers.rx3.videoRoute",
         values: { kind: "resourceIds", collection: "room1.sources" },
@@ -118,7 +117,7 @@ test("ACM transmitters keep their zero-padded ids", () => {
     assert.equal(toDevice(binding, "Laptop", collections, tree), "007");
 });
 
-test("a member with no name falls back to its value", () => {
+it("a member with no name falls back to its value", () => {
     const binding = {
         state: "blustream-acm.0.receivers.rx3.videoRoute",
         values: { kind: "resourceIds", collection: "room1.sources" },
@@ -131,7 +130,7 @@ test("a member with no name falls back to its value", () => {
     assert.deepEqual(optionsOf(optionsFor(binding, collections, tree)), [{ name: "007", value: "007" }]);
 });
 
-test("a collection whose members are not in the tree yet is unresolved", () => {
+it("a collection whose members are not in the tree yet is unresolved", () => {
     const binding = {
         state: "blackmagic-atem.0.me0.programInput",
         values: { kind: "resourceIds", collection: "atem.sources" },
@@ -140,27 +139,33 @@ test("a collection whose members are not in the tree yet is unresolved", () => {
     assert.deepEqual(resolved, { ok: false, reason: "no-members", collection: "atem.sources" });
 });
 
-test("a device value is accepted in place of its semantic name", () => {
+it("a device value is accepted in place of its semantic name", () => {
     const binding = { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } } as const;
     const tree = treeOf({
-        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { "1": "HDMI1" } } },
+        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { 1: "HDMI1" } } },
     });
     assert.equal(toDevice(binding, 1, collections, tree), 1);
 });
 
-test("a value outside the space is refused rather than written", () => {
+it("a value outside the space is refused rather than written", () => {
     const binding = { state: "iiyama-prolite.0.inputSource", values: { kind: "objectStates" } } as const;
     const tree = treeOf({
-        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { "1": "HDMI1" } } },
+        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { 1: "HDMI1" } } },
     });
     assert.equal(toDevice(binding, "SCART", collections, tree), undefined);
     assert.equal(toSemantic(binding, 9, collections, tree), undefined);
 });
 
-test("an explicit table needs no object tree at all", () => {
+it("an explicit table needs no object tree at all", () => {
     const binding = {
         state: "some-adapter.0.mode",
-        values: { kind: "table", entries: [{ name: "Show", value: 1 }, { name: "Rehearse", value: 2 }] },
+        values: {
+            kind: "table",
+            entries: [
+                { name: "Show", value: 1 },
+                { name: "Rehearse", value: 2 },
+            ],
+        },
     } as const;
     assert.equal(toDevice(binding, "Rehearse", collections, treeOf({})), 2);
     assert.equal(toSemantic(binding, 1, collections, treeOf({})), "Show");

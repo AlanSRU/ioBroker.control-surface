@@ -4,13 +4,12 @@
  * the truth.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { read, readAll } from "./feedback.ts";
-import { Registry } from "./registry.ts";
-import { allCollections, allMapped } from "../mapping.ts";
-import { NOW, treeOf } from "./testing.ts";
+import { read, readAll } from "./feedback";
+import { Registry } from "./registry";
+import { allCollections, allMapped } from "../mapping";
+import { NOW, treeOf } from "./testing";
 
 const { registry } = Registry.load(allMapped, allCollections);
 
@@ -22,7 +21,7 @@ const owners = {
     "streamdeck.0.info.connection": true,
 } as const;
 
-test("a healthy boolean reads back as a boolean, not as text", () => {
+it("a healthy boolean reads back as a boolean, not as text", () => {
     const tree = treeOf({ values: { ...owners, "iiyama-prolite.0.power": true } });
     assert.deepEqual(read("display.lobby", "power", "power", registry, tree), {
         resource: "display.lobby",
@@ -35,15 +34,15 @@ test("a healthy boolean reads back as a boolean, not as text", () => {
     });
 });
 
-test("a selection is mapped into the capability's vocabulary", () => {
+it("a selection is mapped into the capability's vocabulary", () => {
     const tree = treeOf({
         values: { ...owners, "iiyama-prolite.0.inputSource": 2 },
-        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { "1": "HDMI1", "2": "HDMI2" } } },
+        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { 1: "HDMI1", 2: "HDMI2" } } },
     });
     assert.equal(read("display.lobby", "source", "source", registry, tree)?.value, "HDMI2");
 });
 
-test("an unmappable value is reported raw rather than dropped", () => {
+it("an unmappable value is reported raw rather than dropped", () => {
     // The ACM reports a route of 007 but the transmitter list has not loaded.
     // 007 is still the truth; showing nothing would be wrong.
     const tree = treeOf({ values: { ...owners, "blustream-acm.0.receivers.rx3.videoRoute": "007" } });
@@ -52,7 +51,7 @@ test("an unmappable value is reported raw rather than dropped", () => {
     assert.equal(reading?.healthy, true);
 });
 
-test("a missing state is unresolved, with no invented timestamp", () => {
+it("a missing state is unresolved, with no invented timestamp", () => {
     const reading = read("atem.recording", "transport", "status", registry, treeOf({ values: owners }));
     assert.equal(reading?.value, null);
     assert.equal(reading?.healthy, false);
@@ -60,7 +59,7 @@ test("a missing state is unresolved, with no invented timestamp", () => {
     assert.equal(reading?.timestamp, 0);
 });
 
-test("a state that exists but has never reported is told apart from a missing one", () => {
+it("a state that exists but has never reported is told apart from a missing one", () => {
     const tree = treeOf({
         values: owners,
         states: { "iiyama-prolite.0.power": { val: null, ack: true, ts: 0 } },
@@ -68,7 +67,7 @@ test("a state that exists but has never reported is told apart from a missing on
     assert.equal(read("display.lobby", "power", "power", registry, tree)?.unhealthy, "never-reported");
 });
 
-test("an unacknowledged value is not presented as fact", () => {
+it("an unacknowledged value is not presented as fact", () => {
     // ack:false is a command someone wrote, not the device reporting.
     const tree = treeOf({
         values: owners,
@@ -81,7 +80,7 @@ test("an unacknowledged value is not presented as fact", () => {
     assert.equal(reading?.value, true);
 });
 
-test("an offline owner outranks the per-state reasons it causes", () => {
+it("an offline owner outranks the per-state reasons it causes", () => {
     // The adapter being down explains every one of its resources at once, so it
     // is the more useful thing to say than "unacknowledged".
     const tree = treeOf({
@@ -91,37 +90,34 @@ test("an offline owner outranks the per-state reasons it causes", () => {
     assert.equal(read("display.lobby", "power", "power", registry, tree)?.unhealthy, "owner-offline");
 });
 
-test("an adapter publishing no info.connection reads as healthy, not as offline", () => {
+it("an adapter publishing no info.connection reads as healthy, not as offline", () => {
     // Marking every resource of such an adapter unhealthy for following a
     // different convention would be worse than assuming nothing.
     const tree = treeOf({ values: { "iiyama-prolite.0.power": true } });
     assert.equal(read("display.lobby", "power", "power", registry, tree)?.healthy, true);
 });
 
-test("health is an ordinary capability, read through the same path", () => {
+it("health is an ordinary capability, read through the same path", () => {
     const tree = treeOf({ values: { ...owners, "iiyama-prolite.0.info.connection": true } });
     assert.equal(read("display.lobby", "health", "online", registry, tree)?.value, true);
 });
 
-test("an undeclared feedback returns nothing", () => {
+it("an undeclared feedback returns nothing", () => {
     assert.equal(read("display.lobby", "power", "nope", registry, treeOf({})), undefined);
     assert.equal(read("nope", "power", "power", registry, treeOf({})), undefined);
 });
 
-test("readAll covers every declared feedback and skips none", () => {
+it("readAll covers every declared feedback and skips none", () => {
     const declared = registry
         .allResources()
         .flatMap(r => r.capabilities.flatMap(c => c.feedback.map(f => `${r.id}.${c.id}.${f.id}`)));
 
     const readings = readAll(registry, treeOf({}));
     assert.equal(readings.length, declared.length);
-    assert.deepEqual(
-        readings.map(r => `${r.resource}.${r.capability}.${r.feedback}`).sort(),
-        [...declared].sort(),
-    );
+    assert.deepEqual(readings.map(r => `${r.resource}.${r.capability}.${r.feedback}`).sort(), [...declared].sort());
 });
 
-test("readAll reports an empty tree as unresolved rather than omitting it", () => {
+it("readAll reports an empty tree as unresolved rather than omitting it", () => {
     // A control whose device has gone still needs publishing, or a panel cannot
     // tell "gone" from "never existed".
     const readings = readAll(registry, treeOf({}));
@@ -129,16 +125,22 @@ test("readAll reports an empty tree as unresolved rather than omitting it", () =
     assert.ok(readings.every(r => !r.healthy && r.unhealthy === "unresolved"));
 });
 
-test("a broadcast route declares no feedback to read", () => {
+it("a broadcast route declares no feedback to read", () => {
     // Nothing to bind to: what a broadcast changes is every receiver's own
     // route, so the matrix has no readable counterpart of its own.
     const matrix = registry.getResource("room1.matrix");
     const routing = matrix?.capabilities.find(c => c.id === "routing");
     assert.deepEqual(routing?.feedback, []);
-    assert.equal(readAll(registry, treeOf({})).some(r => r.resource === "room1.matrix"), false);
+    assert.equal(
+        readAll(registry, treeOf({})).some(r => r.resource === "room1.matrix"),
+        false,
+    );
 });
 
-test("a one-way remote contributes no readings at all", () => {
+it("a one-way remote contributes no readings at all", () => {
     // sky-remote is write-only; every button is read:false.
-    assert.equal(readAll(registry, treeOf({})).some(r => r.resource === "lounge.skybox"), false);
+    assert.equal(
+        readAll(registry, treeOf({})).some(r => r.resource === "lounge.skybox"),
+        false,
+    );
 });

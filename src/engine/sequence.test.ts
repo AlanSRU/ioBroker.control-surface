@@ -3,15 +3,14 @@
  * this is the part of the system that runs unattended during a show.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { Scene } from "../model.ts";
-import { Registry } from "./registry.ts";
-import { SceneBook } from "./scenes.ts";
-import { run } from "./sequence.ts";
-import { allCollections, allMapped } from "../mapping.ts";
-import { FakeTree, recorderOn } from "./testing.ts";
+import type { Scene } from "../model";
+import { Registry } from "./registry";
+import { SceneBook } from "./scenes";
+import { run } from "./sequence";
+import { allCollections, allMapped } from "../mapping";
+import { FakeTree, recorderOn } from "./testing";
 
 const { registry } = Registry.load(allMapped, allCollections);
 
@@ -37,7 +36,7 @@ function bookOf(scenes: ReadonlyArray<Scene>): SceneBook {
 const powerOn = { kind: "do", invoke: { resource: "display.lobby", capability: "power", action: "on" } } as const;
 const powerOff = { kind: "do", invoke: { resource: "display.lobby", capability: "power", action: "off" } } as const;
 
-test("steps run in order, and a scene reports completion", () => {
+it("steps run in order, and a scene reports completion", () => {
     const tree = new FakeTree({ values: connected });
     const effects = recorderOn(tree);
     const book = bookOf([{ id: "s", name: "s", steps: [powerOn, powerOff] }]);
@@ -45,11 +44,14 @@ test("steps run in order, and a scene reports completion", () => {
     return run("s", book, registry, effects).then(report => {
         assert.equal(report.completed, true);
         assert.deepEqual(report.failures, []);
-        assert.deepEqual(effects.writes.map(w => w.value), [true, false]);
+        assert.deepEqual(
+            effects.writes.map(w => w.value),
+            [true, false],
+        );
     });
 });
 
-test("a delay waits and does not write", async () => {
+it("a delay waits and does not write", async () => {
     const effects = recorderOn(new FakeTree({ values: connected }));
     const book = bookOf([{ id: "s", name: "s", steps: [powerOn, { kind: "delay", ms: 2000 }, powerOff] }]);
 
@@ -58,7 +60,7 @@ test("a delay waits and does not write", async () => {
     assert.equal(effects.writes.length, 2);
 });
 
-test("a refused step aborts the scene by default", async () => {
+it("a refused step aborts the scene by default", async () => {
     // toggle with nothing reported yet: the action engine refuses rather than
     // guessing, and the rest of the scene must not run.
     const effects = recorderOn(new FakeTree({ values: connected }));
@@ -84,7 +86,7 @@ test("a refused step aborts the scene by default", async () => {
     });
 });
 
-test("continue records the failure and carries on", async () => {
+it("continue records the failure and carries on", async () => {
     // "The show goes on" must never mean "nothing happened".
     const effects = recorderOn(new FakeTree({ values: connected }));
     const book = bookOf([
@@ -109,7 +111,7 @@ test("continue records the failure and carries on", async () => {
     assert.equal(effects.writes.length, 1);
 });
 
-test("a write that does not land is a failure, not a success", async () => {
+it("a write that does not land is a failure, not a success", async () => {
     const effects = recorderOn(new FakeTree({ values: connected }), { failWrites: true });
     const report = await run("s", bookOf([{ id: "s", name: "s", steps: [powerOn] }]), registry, effects);
 
@@ -117,7 +119,7 @@ test("a write that does not land is a failure, not a success", async () => {
     assert.equal(report.failures[0]!.reason.kind, "write-failed");
 });
 
-test("retry tries again, then gives up", async () => {
+it("retry tries again, then gives up", async () => {
     const effects = recorderOn(new FakeTree({ values: connected }), { failWrites: true });
     const book = bookOf([
         {
@@ -134,7 +136,7 @@ test("retry tries again, then gives up", async () => {
     assert.equal(report.failures.length, 1, "one step, so one reported failure");
 });
 
-test("retry succeeds when the condition clears", async () => {
+it("retry succeeds when the condition clears", async () => {
     const tree = new FakeTree({ values: connected });
     const effects = recorderOn(tree);
     // toggle refuses until power has reported; make it report after the first wait.
@@ -156,10 +158,13 @@ test("retry succeeds when the condition clears", async () => {
     const report = await run("s", book, registry, effects);
     assert.equal(report.completed, true);
     assert.deepEqual(report.failures, []);
-    assert.deepEqual(effects.writes.map(w => w.value), [false]);
+    assert.deepEqual(
+        effects.writes.map(w => w.value),
+        [false],
+    );
 });
 
-test("a fallback replaces the rest of the scene rather than resuming it", async () => {
+it("a fallback replaces the rest of the scene rather than resuming it", async () => {
     // "Switch to the backup projector" does not then want the remaining steps
     // aimed at the dead one. The step after the fallback point is perfectly
     // valid, so if it ran its write would show up.
@@ -197,7 +202,7 @@ test("a fallback replaces the rest of the scene rather than resuming it", async 
     assert.equal(report.failures[0]!.handled, "fallback");
 });
 
-test("a fallback that itself fails fails the run", async () => {
+it("a fallback that itself fails fails the run", async () => {
     const effects = recorderOn(new FakeTree({ values: connected }));
     const book = bookOf([
         {
@@ -224,7 +229,7 @@ test("a fallback that itself fails fails the run", async () => {
     assert.equal(report.failures.length, 2, "both the original and the fallback are reported");
 });
 
-test("waitFor returns as soon as the feedback matches", async () => {
+it("waitFor returns as soon as the feedback matches", async () => {
     const tree = new FakeTree({ values: connected });
     const effects = recorderOn(tree);
     effects.at(150, () => tree.set("iiyama-prolite.0.power", true));
@@ -251,7 +256,7 @@ test("waitFor returns as soon as the feedback matches", async () => {
     assert.ok(effects.elapsed >= 150 && effects.elapsed < 5000, `waited ${effects.elapsed}ms`);
 });
 
-test("waitFor gives up at the timeout and says what it last saw", async () => {
+it("waitFor gives up at the timeout and says what it last saw", async () => {
     const tree = new FakeTree({ values: { ...connected, "iiyama-prolite.0.power": false } });
     const effects = recorderOn(tree);
     const book = bookOf([
@@ -277,7 +282,7 @@ test("waitFor gives up at the timeout and says what it last saw", async () => {
     assert.equal(effects.elapsed, 300);
 });
 
-test("waitFor is not satisfied by an unhealthy reading", async () => {
+it("waitFor is not satisfied by an unhealthy reading", async () => {
     // An unacknowledged true is a command someone wrote, not the projector
     // confirming. A scene carrying on from it would be acting on an assumption
     // at the exact moment it asked not to.
@@ -306,7 +311,7 @@ test("waitFor is not satisfied by an unhealthy reading", async () => {
     assert.equal(report.failures[0]!.reason.kind, "timeout");
 });
 
-test("parallel steps all run", async () => {
+it("parallel steps all run", async () => {
     const effects = recorderOn(new FakeTree({ values: connected }));
     const book = bookOf([
         {
@@ -317,7 +322,10 @@ test("parallel steps all run", async () => {
                     kind: "parallel",
                     steps: [
                         powerOn,
-                        { kind: "do", invoke: { resource: "atem.recording", capability: "transport", action: "start" } },
+                        {
+                            kind: "do",
+                            invoke: { resource: "atem.recording", capability: "transport", action: "start" },
+                        },
                     ],
                 },
             ],
@@ -332,7 +340,7 @@ test("parallel steps all run", async () => {
     ]);
 });
 
-test("a nested scene runs inline and its failures name it", async () => {
+it("a nested scene runs inline and its failures name it", async () => {
     const effects = recorderOn(new FakeTree({ values: connected }));
     const book = bookOf([
         { id: "outer", name: "outer", steps: [powerOn, { kind: "scene", scene: "inner" }] },
@@ -347,10 +355,13 @@ test("a nested scene runs inline and its failures name it", async () => {
 
     // powerOn writes true, so the nested toggle then has something to invert.
     assert.equal(report.completed, true);
-    assert.deepEqual(effects.writes.map(w => w.value), [true, false]);
+    assert.deepEqual(
+        effects.writes.map(w => w.value),
+        [true, false],
+    );
 });
 
-test("the brief's presentation scene runs end to end", async () => {
+it("the brief's presentation scene runs end to end", async () => {
     // Section 17, against the real mapping: power the display, wait for it to
     // confirm, route the laptop, then take the panel to its page.
     const tree = new FakeTree({

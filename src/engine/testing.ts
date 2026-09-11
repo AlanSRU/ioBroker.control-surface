@@ -6,9 +6,9 @@
  * engine depends on.
  */
 
-import type { StateId, StateValue } from "../model.ts";
-import type { ObjectSource, StateMeta, StateSnapshot } from "./resolver.ts";
-import type { StateWrite } from "./actions.ts";
+import type { StateId, StateValue } from "../model";
+import type { ObjectSource, StateMeta, StateSnapshot } from "./resolver";
+import type { StateWrite } from "./actions";
 
 export interface TreeSpec {
     /** `common` fields, keyed by state id. */
@@ -84,7 +84,11 @@ export class FakeTree {
         this.spec.states[id] = { val, ack, ts: NOW };
     }
 
-    /** Removes a state, as `blackmagic-atem` does when it rebuilds its tree. */
+    /**
+     * Removes a state, as `blackmagic-atem` does when it rebuilds its tree.
+     *
+     * @param id
+     */
     remove(id: StateId): void {
         delete this.spec.states[id];
     }
@@ -119,7 +123,8 @@ export interface Recorder {
  * state itself instead.
  *
  * @param tree - The tree to read and write
- * @param opts - `failWrites` makes every write throw
+ * @param opts - Options; `failWrites` makes every write reject
+ * @param opts.failWrites
  * @returns The recorder
  */
 export function recorderOn(tree: FakeTree, opts: { failWrites?: boolean } = {}): Recorder {
@@ -136,21 +141,25 @@ export function recorderOn(tree: FakeTree, opts: { failWrites?: boolean } = {}):
             scheduled.push({ at: ms, change });
         },
         source: () => tree.source(),
-        async write(planned) {
+        write(planned) {
             if (opts.failWrites) {
-                throw new Error("write refused by the test");
+                return Promise.reject(new Error("write refused by the test"));
             }
             writes.push(...planned);
             for (const w of planned) {
                 tree.set(w.state, w.value);
             }
+            return Promise.resolve();
         },
-        async sleep(ms) {
+        sleep(ms) {
+            // Nothing actually waits: the clock is virtual, so a scene with a
+            // ten-second delay in it still runs in microseconds.
             elapsed += ms;
             for (const entry of scheduled.filter(s => s.at <= elapsed)) {
                 entry.change();
                 entry.at = Number.POSITIVE_INFINITY;
             }
+            return Promise.resolve();
         },
     };
     return recorder;

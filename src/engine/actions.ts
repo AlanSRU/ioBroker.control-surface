@@ -18,10 +18,10 @@
  *     immediately on `state.ack`, so an acked write is silently swallowed.
  */
 
-import type { ActionDef, ActionInvocation, StateId } from "../model.ts";
-import type { ObjectSource, StateValue } from "./resolver.ts";
-import { optionsFor, toDevice } from "./resolver.ts";
-import type { Registry } from "./registry.ts";
+import type { ActionDef, ActionInvocation, StateId } from "../model";
+import type { ObjectSource, StateValue } from "./resolver";
+import { optionsFor, toDevice } from "./resolver";
+import type { Registry } from "./registry";
 
 /** One write the executor should perform. */
 export interface StateWrite {
@@ -48,8 +48,13 @@ export type Refusal =
     | { readonly reason: "not-permitted"; readonly state: StateId };
 
 export type Plan =
-    | { readonly ok: true; readonly writes: ReadonlyArray<StateWrite> }
-    | ({ readonly ok: false } & Refusal);
+    | {
+          readonly ok: true;
+          readonly writes: ReadonlyArray<StateWrite>;
+      }
+    | ({
+          readonly ok: false;
+      } & Refusal);
 
 /**
  * Works out what an invocation should write.

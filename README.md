@@ -5,10 +5,11 @@ existing adapters keep owning their devices, and this sits above them so that
 *"show the laptop on the projector"* is expressible without knowing which
 protocol answers.
 
-**Status: the two decisions that were blocking implementation are settled, and
-the engine core is built.** Registry, resolver, action engine, feedback engine
-sequence engine and state publisher all exist and are tested, with no ioBroker
-anywhere near them. What remains is the adapter shell that applies them. See
+**Status: Phase 1 is built.** Registry, resolver, action engine, feedback
+engine, sequence engine and state publisher all exist and are tested with no
+ioBroker anywhere near them; the adapter applies them. It has not yet been run
+against live equipment, the admin UI is JSON rather than a builder, and the
+icon is still the scaffold placeholder. See
 [`docs/architecture/model.md`](docs/architecture/model.md).
 
 The name is free on npm and absent from the ioBroker adapter catalogue as of
@@ -27,6 +28,7 @@ The name is free on npm and absent from the ioBroker adapter catalogue as of
 | [`src/engine/scenes.ts`](src/engine/scenes.ts) | Scene validation: the faults findable before a device is touched. |
 | [`src/engine/sequence.ts`](src/engine/sequence.ts) | Running a scene — delays, waits, retries, fallbacks. |
 | [`src/engine/publisher.ts`](src/engine/publisher.ts) | The semantic state tree, as data an adapter can apply. |
+| [`src/main.ts`](src/main.ts) | The adapter: `ObjectSource` and `Effects` over ioBroker, and nothing else. |
 | [`docs/architecture/model.md`](docs/architecture/model.md) | What the mapping proved, what it broke, and the two settled decisions. |
 | [`docs/architecture/iobroker-react.md`](docs/architecture/iobroker-react.md) | The production venue system assessed against the model — crossover, and what this layer would take off it. |
 
@@ -77,15 +79,31 @@ ioBroker objects and does not know what reads them.
   reporting — stays put. Assessed in
   [`docs/architecture/iobroker-react.md`](docs/architecture/iobroker-react.md).
 
+## What it publishes
+
+Each declared resource becomes a branch of an ordinary ioBroker state tree:
+
+```
+control-surface.0.resources.display.lobby.power.on        button, write-only
+control-surface.0.resources.display.lobby.power.power     boolean, read-only
+control-surface.0.resources.display.lobby.source.select   with common.states
+control-surface.0.resources.display.lobby.healthy         boolean, read-only
+```
+
+Values are the device's own, with `common.states` carrying the labels, because
+that is what every existing ioBroker consumer already reads. The gain is the
+addressing: `display.lobby` rather than `iiyama-prolite.0`, and the same shape
+whichever adapter answers.
+
 ## Building
 
 ```bash
 npm install
-npm run verify    # tsc --noEmit, then the tests
+npm run verify    # tsc --noEmit, then the unit tests
+npm run build     # build-adapter ts
+npm run lint
+npm test          # unit + package tests
 ```
-
-Tests are `node:test` run through Node's native type stripping, so there is no
-test runner or transpiler dependency. Node 22.6+ is required.
 
 ## Licence
 

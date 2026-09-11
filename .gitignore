@@ -25,3 +25,10 @@ coverage/
 # OS files
 .DS_Store
 Thumbs.db
+
+# From the adapter scaffold
+nbproject
+iobroker.*.tgz
+.commitinfo
+admin/i18n/flat.txt
+admin/i18n/*/flat.txt

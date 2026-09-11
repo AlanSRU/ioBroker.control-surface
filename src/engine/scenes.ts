@@ -16,8 +16,8 @@
  * This module does the first. `sequence.ts` does the second.
  */
 
-import type { Scene, SequenceStep } from "../model.ts";
-import type { Registry, RegistryProblem } from "./registry.ts";
+import type { Scene, SequenceStep } from "../model";
+import type { Registry, RegistryProblem } from "./registry";
 
 export interface SceneLoad {
     readonly book: SceneBook;

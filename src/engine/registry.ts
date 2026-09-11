@@ -13,15 +13,7 @@
  * resources down with it.
  */
 
-import type {
-    ActionDef,
-    Capability,
-    FeedbackDef,
-    Resource,
-    ResourceCollection,
-    ResourceId,
-    StateId,
-} from "../model.ts";
+import type { ActionDef, Capability, FeedbackDef, Resource, ResourceCollection, ResourceId, StateId } from "../model";
 
 /** One rejected declaration, with enough context to fix it. */
 export interface RegistryProblem {
@@ -86,10 +78,7 @@ export class Registry {
      * @param collections - Declared runtime collections
      * @returns The registry, plus one problem per rejected declaration
      */
-    static load(
-        resources: ReadonlyArray<Resource>,
-        collections: ReadonlyArray<ResourceCollection>,
-    ): RegistryLoad {
+    static load(resources: ReadonlyArray<Resource>, collections: ReadonlyArray<ResourceCollection>): RegistryLoad {
         const problems: RegistryProblem[] = [];
         const byId = new Map<ResourceId, Resource>();
         const collectionsById = new Map<ResourceId, ResourceCollection>();
@@ -183,6 +172,8 @@ export class Registry {
      * Whether a state may be **written**. Collection member states are excluded
      * deliberately: they are discovered by pattern at runtime, so they are
      * resolved through `ObjectSource`, never written.
+     *
+     * @param state
      */
     permits(state: StateId): boolean {
         return this.states.has(state);
@@ -315,6 +306,8 @@ function validateCapabilities(
  * @param where - Resource label for the problem report
  * @param what - Capability-scoped name of the action or feedback
  * @param binding - The binding to check
+ * @param binding.state
+ * @param binding.values
  * @param collections - Collections already accepted
  * @returns One problem per fault; empty when the binding is usable
  */

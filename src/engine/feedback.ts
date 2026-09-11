@@ -15,10 +15,10 @@
  * `ObjectSource` and nothing here subscribes or writes.
  */
 
-import type { CapabilityId, FeedbackDef, FeedbackValue, ResourceId, StateValue, UnhealthyReason } from "../model.ts";
-import type { ObjectSource } from "./resolver.ts";
-import { toSemantic } from "./resolver.ts";
-import type { Registry } from "./registry.ts";
+import type { CapabilityId, FeedbackDef, FeedbackValue, ResourceId, StateValue, UnhealthyReason } from "../model";
+import type { ObjectSource } from "./resolver";
+import { toSemantic } from "./resolver";
+import type { Registry } from "./registry";
 
 /**
  * Reads one declared feedback.
@@ -112,6 +112,8 @@ function readDef(
  *
  * @param resource - Semantic resource id, for finding the owner
  * @param snapshot - The state as read back
+ * @param snapshot.val
+ * @param snapshot.ack
  * @param registry - The declared resources
  * @param source - View of the object tree
  * @returns The reason, or undefined when the reading is sound

@@ -7,13 +7,13 @@
  * satisfy here and expensive to discover against a live object dump.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { Registry } from "./registry.ts";
-import { objectsFor, ROOT, statesFor, writeTargets } from "./publisher.ts";
-import { allCollections, allMapped } from "../mapping.ts";
-import { treeOf } from "./testing.ts";
+import { Registry } from "./registry";
+import type { PublishedObject } from "./publisher";
+import { objectsFor, ROOT, statesFor, writeTargets } from "./publisher";
+import { allCollections, allMapped } from "../mapping";
+import { treeOf } from "./testing";
 
 const { registry } = Registry.load(allMapped, allCollections);
 const empty = treeOf({});
@@ -35,13 +35,13 @@ const acmTree = treeOf({
  * @param objects - Objects to search
  * @returns The object
  */
-function objectAt(id: string, objects = objectsFor(registry, empty)) {
+function objectAt(id: string, objects = objectsFor(registry, empty)): PublishedObject {
     const found = objects.find(o => o.id === id);
     assert.ok(found, `no published object at ${id}`);
     return found;
 }
 
-test("every state has its parent objects published, and parents come first", () => {
+it("every state has its parent objects published, and parents come first", () => {
     // E3009: ioBroker tolerates an orphan state at runtime, so nothing looks
     // wrong until the adapter is reviewed against a live dump.
     const objects = objectsFor(registry, empty);
@@ -56,13 +56,13 @@ test("every state has its parent objects published, and parents come first", () 
     }
 });
 
-test("a dotted resource id becomes tree levels, not one flat segment", () => {
+it("a dotted resource id becomes tree levels, not one flat segment", () => {
     assert.equal(objectAt(`${ROOT}.display`).type, "folder");
     assert.equal(objectAt(`${ROOT}.display.lobby`).type, "device");
     assert.equal(objectAt(`${ROOT}.display.lobby.power`).type, "channel");
 });
 
-test("a momentary action publishes as a write-only button", () => {
+it("a momentary action publishes as a write-only button", () => {
     // `power.on` means "do the on thing", never "are you on".
     const on = objectAt(`${ROOT}.display.lobby.power.on`).common;
     assert.deepEqual(on, { name: "on", type: "boolean", role: "button", read: false, write: true });
@@ -72,7 +72,7 @@ test("a momentary action publishes as a write-only button", () => {
     assert.equal(objectAt(`${ROOT}.lounge.skybox.navigation.up`).common.role, "button");
 });
 
-test("a level publishes readable, because role level requires it", () => {
+it("a level publishes readable, because role level requires it", () => {
     // A write-only `level` fails E1010.
     const volume = objectAt(`${ROOT}.display.lobby.volume.set`).common;
     assert.equal(volume.role, "level");
@@ -83,11 +83,11 @@ test("a level publishes readable, because role level requires it", () => {
     assert.equal(volume.step, 1);
 });
 
-test("a level with no declared step publishes none", () => {
+it("a level with no declared step publishes none", () => {
     assert.equal("step" in objectAt(`${ROOT}.display.lobby.brightness.set`).common, false);
 });
 
-test("read-only feedback never uses a writable role", () => {
+it("read-only feedback never uses a writable role", () => {
     // `value` is read-only and `level` is writable; swapping them fails E1010.
     const objects = objectsFor(registry, acmTree);
     for (const object of objects) {
@@ -104,7 +104,7 @@ test("read-only feedback never uses a writable role", () => {
     }
 });
 
-test("only roles ioBroker actually defines are published", () => {
+it("only roles ioBroker actually defines are published", () => {
     // E1008 rejects invented roles.
     const allowed = new Set(["button", "level", "text", "value", "indicator"]);
     for (const object of objectsFor(registry, acmTree)) {
@@ -114,7 +114,7 @@ test("only roles ioBroker actually defines are published", () => {
     }
 });
 
-test("a value space becomes common.states, keyed by the device value", () => {
+it("a value space becomes common.states, keyed by the device value", () => {
     // `{"007": "Laptop"}` is the idiom every existing consumer reads, including
     // TouchBroker's map:{fromStates:true}.
     const route = objectAt(`${ROOT}.display.stage.routing.video`, objectsFor(registry, acmTree)).common;
@@ -123,7 +123,7 @@ test("a value space becomes common.states, keyed by the device value", () => {
     assert.equal(route.role, "text");
 });
 
-test("zero-padded string ids publish as strings, not numbers", () => {
+it("zero-padded string ids publish as strings, not numbers", () => {
     // The Blustream C66 trap, reached by a second route. Its output.<N>.source
     // is a string state whose states are {"01": "HDMI 1", ...}; publishing
     // type number would send 1 for "01" and the device would reject it.
@@ -141,7 +141,7 @@ test("zero-padded string ids publish as strings, not numbers", () => {
     assert.deepEqual(audio.states, { "01": "HDMI 1", "06": "HDMI 6" });
 });
 
-test("a genuinely numeric value space still publishes as a number", () => {
+it("a genuinely numeric value space still publishes as a number", () => {
     const tree = treeOf({
         members: { "blackmagic-atem.0.inputs.input*": ["blackmagic-atem.0.inputs.input3"] },
         values: {
@@ -152,16 +152,16 @@ test("a genuinely numeric value space still publishes as a number", () => {
     const program = objectAt(`${ROOT}.atem.me1.program.source.select`, objectsFor(registry, tree)).common;
     assert.equal(program.type, "number");
     assert.equal(program.role, "level", "a writable number is level, never value");
-    assert.deepEqual(program.states, { "3": "Camera 3" });
+    assert.deepEqual(program.states, { 3: "Camera 3" });
 });
 
-test("an unresolved value space publishes no options rather than an empty list", () => {
+it("an unresolved value space publishes no options rather than an empty list", () => {
     // A selector with no options is a broken control; one with none declared is
     // a control whose list has not arrived.
     assert.equal("states" in objectAt(`${ROOT}.display.stage.routing.video`).common, false);
 });
 
-test("an action and a feedback sharing an id publish as one read/write state", () => {
+it("an action and a feedback sharing an id publish as one read/write state", () => {
     const objects = objectsFor(registry, acmTree);
     const matching = objects.filter(o => o.id === `${ROOT}.display.stage.routing.video`);
     assert.equal(matching.length, 1, "published twice");
@@ -169,7 +169,7 @@ test("an action and a feedback sharing an id publish as one read/write state", (
     assert.equal(matching[0]!.common.write, true);
 });
 
-test("every resource publishes an aggregate health state", () => {
+it("every resource publishes an aggregate health state", () => {
     const healthy = objectAt(`${ROOT}.display.lobby.healthy`).common;
     assert.deepEqual(
         { type: healthy.type, role: healthy.role, read: healthy.read, write: healthy.write },
@@ -177,22 +177,25 @@ test("every resource publishes an aggregate health state", () => {
     );
 });
 
-test("published values are raw device values, and always acknowledged", () => {
+it("published values are raw device values, and always acknowledged", () => {
     const states = statesFor(registry, acmTree);
     const route = states.find(s => s.id === `${ROOT}.display.stage.routing.video`);
     // Raw, not the "Laptop" label: the label lives in common.states.
     assert.equal(route?.val, "007");
-    assert.ok(states.every(s => s.ack === true), "this layer reports, it does not command");
+    assert.ok(
+        states.every(s => s.ack === true),
+        "this layer reports, it does not command",
+    );
 });
 
-test("an unresolved binding publishes a quality code, not a silent null", () => {
+it("an unresolved binding publishes a quality code, not a silent null", () => {
     const states = statesFor(registry, empty);
     const status = states.find(s => s.id === `${ROOT}.atem.recording.transport.status`);
     assert.equal(status?.val, null);
     assert.equal(status?.q, 0x11, "general instance problem");
 });
 
-test("an offline owner publishes as instance-not-connected", () => {
+it("an offline owner publishes as instance-not-connected", () => {
     const tree = treeOf({
         values: { "iiyama-prolite.0.info.connection": false, "iiyama-prolite.0.power": true },
     });
@@ -200,7 +203,7 @@ test("an offline owner publishes as instance-not-connected", () => {
     assert.equal(power?.q, 0x12);
 });
 
-test("a healthy reading publishes quality good", () => {
+it("a healthy reading publishes quality good", () => {
     const tree = treeOf({
         values: { "iiyama-prolite.0.info.connection": true, "iiyama-prolite.0.power": true },
     });
@@ -209,7 +212,7 @@ test("a healthy reading publishes quality good", () => {
     assert.equal(power?.val, true);
 });
 
-test("resource health aggregates its own bindings", () => {
+it("resource health aggregates its own bindings", () => {
     const tree = treeOf({
         values: {
             "iiyama-prolite.0.info.connection": true,
@@ -219,7 +222,7 @@ test("resource health aggregates its own bindings", () => {
             "iiyama-prolite.0.video.brightness": 50,
             "iiyama-prolite.0.info.operatingHours": 10,
         },
-        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { "1": "HDMI1" } } },
+        meta: { "iiyama-prolite.0.inputSource": { type: "number", states: { 1: "HDMI1" } } },
     });
     const healthy = statesFor(registry, tree).find(s => s.id === `${ROOT}.display.lobby.healthy`);
     assert.equal(healthy?.val, true);
@@ -228,7 +231,7 @@ test("resource health aggregates its own bindings", () => {
     assert.equal(partial?.val, false);
 });
 
-test("every writable state has a write target, and every target is writable", () => {
+it("every writable state has a write target, and every target is writable", () => {
     // A write:true state with no handler is a control whose writes vanish.
     const objects = objectsFor(registry, acmTree);
     const targets = writeTargets(registry);
@@ -242,7 +245,7 @@ test("every writable state has a write target, and every target is writable", ()
     }
 });
 
-test("a write target resolves to an action the registry declares", () => {
+it("a write target resolves to an action the registry declares", () => {
     for (const [id, target] of writeTargets(registry)) {
         assert.ok(
             registry.getAction(target.resource, target.capability, target.action),
@@ -251,11 +254,13 @@ test("a write target resolves to an action the registry declares", () => {
     }
 });
 
-test("objects and states cover the same published ids", () => {
+it("objects and states cover the same published ids", () => {
     const objectIds = objectsFor(registry, acmTree)
         .filter(o => o.type === "state")
         .map(o => o.id)
         .sort();
-    const stateIds = statesFor(registry, acmTree).map(s => s.id).sort();
+    const stateIds = statesFor(registry, acmTree)
+        .map(s => s.id)
+        .sort();
     assert.deepEqual(stateIds, objectIds);
 });

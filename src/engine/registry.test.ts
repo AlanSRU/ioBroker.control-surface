@@ -3,15 +3,14 @@
  * 2 being enforced rather than described.
  */
 
-import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { Resource, ResourceCollection } from "../model.ts";
-import { Registry } from "./registry.ts";
-import { allCollections, allMapped } from "../mapping.ts";
+import type { Resource, ResourceCollection } from "../model";
+import { Registry } from "./registry";
+import { allCollections, allMapped } from "../mapping";
 
 /** The real mapping must load without complaint, or the mapping is wrong. */
-test("every mapped resource loads cleanly", () => {
+it("every mapped resource loads cleanly", () => {
     const { registry, problems } = Registry.load(allMapped, allCollections);
     assert.deepEqual(problems, []);
     assert.equal(registry.allResources().length, allMapped.length);
@@ -19,7 +18,7 @@ test("every mapped resource loads cleanly", () => {
     assert.ok(registry.getCollection("atem.sources"));
 });
 
-test("the whitelist is exactly the declared bindings", () => {
+it("the whitelist is exactly the declared bindings", () => {
     const { registry } = Registry.load(allMapped, allCollections);
 
     assert.ok(registry.permits("iiyama-prolite.0.power"));
@@ -38,7 +37,7 @@ test("the whitelist is exactly the declared bindings", () => {
     assert.equal(registry.permits("admin.0.info.connection"), false);
 });
 
-test("the observation set is wider than the write whitelist", () => {
+it("the observation set is wider than the write whitelist", () => {
     const { registry } = Registry.load(allMapped, allCollections);
     const observed = registry.observedStates();
 
@@ -54,21 +53,21 @@ test("the observation set is wider than the write whitelist", () => {
     }
 });
 
-test("owner connection follows the ioBroker convention", () => {
+it("owner connection follows the ioBroker convention", () => {
     const { registry } = Registry.load(allMapped, allCollections);
     assert.equal(registry.ownerConnection("display.lobby"), "iiyama-prolite.0.info.connection");
     assert.equal(registry.ownerConnection("surface.reception"), "streamdeck.0.info.connection");
     assert.equal(registry.ownerConnection("nope"), undefined);
 });
 
-test("collection member states are not writable through the whitelist", () => {
+it("collection member states are not writable through the whitelist", () => {
     // Members are discovered by pattern and read through ObjectSource. They are
     // sources of values, never targets.
     const { registry } = Registry.load(allMapped, allCollections);
     assert.equal(registry.permits("blustream-acm.0.transmitters.007.id"), false);
 });
 
-test("lookups reach actions and feedback by name", () => {
+it("lookups reach actions and feedback by name", () => {
     const { registry } = Registry.load(allMapped, allCollections);
 
     const on = registry.getAction("display.lobby", "power", "on");
@@ -83,7 +82,11 @@ test("lookups reach actions and feedback by name", () => {
     assert.equal(registry.getFeedback("nope", "power", "power"), undefined);
 });
 
-/** Minimal valid resource, for mutating into each invalid case. */
+/**
+ * Minimal valid resource, for mutating into each invalid case.
+ *
+ * @param over
+ */
 function resourceOf(over: Partial<Resource> = {}): Resource {
     return {
         id: "test.thing",
@@ -100,7 +103,7 @@ function resourceOf(over: Partial<Resource> = {}): Resource {
     };
 }
 
-test("a bad declaration is dropped without taking the others down", () => {
+it("a bad declaration is dropped without taking the others down", () => {
     const good = resourceOf({ id: "good.one" });
     const bad = resourceOf({ id: "bad one" });
 
@@ -111,7 +114,7 @@ test("a bad declaration is dropped without taking the others down", () => {
     assert.match(problems[0]!.reason, /may not contain/);
 });
 
-test("semantic ids are rejected when they cannot be object ids", () => {
+it("semantic ids are rejected when they cannot be object ids", () => {
     for (const id of ["has space", "star*", "trailing.", ".leading", "double..dot", ""]) {
         const { problems } = Registry.load([resourceOf({ id })], []);
         assert.equal(problems.length, 1, `expected "${id}" to be rejected`);
@@ -120,13 +123,13 @@ test("semantic ids are rejected when they cannot be object ids", () => {
     assert.deepEqual(Registry.load([resourceOf({ id: "display.lobby" })], []).problems, []);
 });
 
-test("duplicate ids are refused", () => {
+it("duplicate ids are refused", () => {
     const { registry, problems } = Registry.load([resourceOf(), resourceOf()], []);
     assert.equal(registry.allResources().length, 1);
     assert.match(problems[0]!.reason, /duplicate id/);
 });
 
-test("a binding to an unknown collection is refused", () => {
+it("a binding to an unknown collection is refused", () => {
     const resource = resourceOf({
         capabilities: [
             {
@@ -148,7 +151,7 @@ test("a binding to an unknown collection is refused", () => {
     assert.match(problems[0]!.reason, /unknown collection "nope"/);
 });
 
-test("a semantic id written where a device id belongs is caught", () => {
+it("a semantic id written where a device id belongs is caught", () => {
     const resource = resourceOf({
         capabilities: [
             {
@@ -163,7 +166,7 @@ test("a semantic id written where a device id belongs is caught", () => {
     assert.match(problems[0]!.reason, /not a full state id/);
 });
 
-test("an inverted level range is caught", () => {
+it("an inverted level range is caught", () => {
     const resource = resourceOf({
         capabilities: [
             {
@@ -177,7 +180,7 @@ test("an inverted level range is caught", () => {
     assert.match(problems[0]!.reason, /min >= max/);
 });
 
-test("a collection pattern that matches nothing is refused", () => {
+it("a collection pattern that matches nothing is refused", () => {
     const collection: ResourceCollection = {
         id: "bad.collection",
         type: "video-source",
@@ -189,7 +192,7 @@ test("a collection pattern that matches nothing is refused", () => {
     assert.match(problems[0]!.reason, /without a \*/);
 });
 
-test("duplicate actions within a capability are caught", () => {
+it("duplicate actions within a capability are caught", () => {
     const resource = resourceOf({
         capabilities: [
             {
