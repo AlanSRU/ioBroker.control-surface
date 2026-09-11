@@ -1,5 +1,5 @@
 /**
- * The semantic model: Resource, Capability, Action, Feedback, Surface, Scene.
+ * The semantic model: Resource, Capability, Action, Feedback, Scene.
  *
  * Design stage only — nothing implements these yet. They exist to be stress
  * tested against real adapters in `mapping.ts`, per the brief's section 46/47.
@@ -72,10 +72,21 @@ export interface ResourceCollection {
     readonly id: ResourceId;
     readonly type: ResourceType;
     readonly owner: string;
-    /** Object-tree pattern whose matches are the members, e.g. `atem.0.input.*`. */
+    /** Object-tree pattern whose matches are the members, e.g. `atem.0.inputs.input*`. */
     readonly members: string;
     /** Per-member state holding the display name, relative to the member. */
     readonly nameState?: string;
+    /**
+     * Per-member state holding the value to write when this member is chosen,
+     * relative to the member.
+     *
+     * Required in practice, and the member's own id segment is not a substitute:
+     * an ACM transmitter is `transmitters.007` and routes as `007`, but an ATEM
+     * input is `inputs.input3` and routes as `3`. Both adapters publish the
+     * value explicitly — `id` and `inputId` respectively — so read it rather
+     * than parsing the object id. Omitted means the id segment is the value.
+     */
+    readonly valueState?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +132,32 @@ export type ActionDef =
      * source-selection are one operation seen from two ends, and only this
      * action kind is needed for both.
      */
-    | { readonly kind: "route"; readonly id: string; readonly binding: StateBinding; readonly layer: RouteLayer };
+    | {
+          readonly kind: "route";
+          readonly id: string;
+          readonly binding: StateBinding;
+          readonly layer: RouteLayer;
+          readonly scope?: RouteScope;
+      };
+
+/**
+ * Which destinations a route reaches.
+ *
+ * `self` — the resource the action hangs off, which is the normal case and the
+ * default. `all` — every destination the owning device serves, written through a
+ * single broadcast state that belongs to no destination at all:
+ * `blustream-acm.0.system.commands.routeAll`, `blustream-mfp.*.output.allSource`.
+ *
+ * This is not a convenience over writing each destination in turn. The ACM
+ * enforces a 500 ms inter-command delay, so ten receivers cost five seconds
+ * individually against one command broadcast, and the production venue system
+ * routes "all displays" this way for that reason.
+ *
+ * The engine does not synthesise a broadcast from per-destination writes when no
+ * broadcast state exists. Doing so needs the set of destinations, which nothing
+ * in this model expresses — see `docs/architecture/model.md`.
+ */
+export type RouteScope = "self" | "all";
 
 /**
  * Blustream routes video, audio, IR, RS232, USB and CEC independently
@@ -145,7 +181,7 @@ export interface ActionInvocation {
 export interface FeedbackDef {
     readonly id: string;
     readonly binding: StateBinding;
-    /** How a surface should read it: a label, a lamp, a number, a selection. */
+    /** How a renderer should read it: a label, a lamp, a number, a selection. */
     readonly presentation: "text" | "boolean" | "number" | "selection";
 }
 
@@ -188,52 +224,42 @@ export type FailurePolicy =
     | { readonly kind: "fallback"; readonly scene: string };
 
 // ---------------------------------------------------------------------------
-// Surface
+// Surfaces — deliberately absent
 // ---------------------------------------------------------------------------
 
-/**
- * A surface is a registered rendering endpoint. This file deliberately stops
- * at registration, fleet identity and health: the logical-UI schema that a
- * surface renders is NOT defined here, because TouchBroker already has one.
- * See `docs/architecture/model.md`, open decision 1.
+/*
+ * There is no `Surface` type here, and that is the settled position rather than
+ * a gap. See `docs/architecture/model.md`, decision 1.
+ *
+ * A surface is a rendering endpoint owned by whatever adapter runs it, which
+ * makes it a `Resource` like any other: `iobroker.streamdeck` already publishes
+ * `currentPageId` (navigation), `connected` and `lastHeartbeat` (health) as
+ * ordinary states, and `surface.reception` in `mapping.ts` binds to them with no
+ * special case. A parallel `Surface` interface would have described the same
+ * device twice, and a scene step that navigates a panel would have needed a
+ * second code path beside the one that switches a projector input.
+ *
+ * Registration, heartbeat, capability reporting, deployment and fleet health —
+ * the brief's sections 20 to 23 — therefore belong to the panel runtime, not
+ * here. This layer publishes semantics as ioBroker states and does not know
+ * which surfaces exist.
  */
-export interface Surface {
-    readonly id: string;
-    readonly type: string;
-    readonly capabilities: SurfaceCapabilities;
-}
-
-export interface SurfaceCapabilities {
-    readonly width: number;
-    readonly height: number;
-    readonly colour: boolean;
-    readonly touch: boolean;
-    readonly images: boolean;
-    readonly video: boolean;
-    readonly buttons: boolean;
-    /** Absent means the surface cannot report or set its own brightness. */
-    readonly brightness?: boolean;
-}
-
-export interface SurfaceState {
-    readonly online: boolean;
-    readonly lastSeen: number;
-    readonly version?: string;
-    readonly currentPage?: string;
-}
 
 // ---------------------------------------------------------------------------
 // Authorization
 // ---------------------------------------------------------------------------
 
-/**
- * What a surface is permitted to do. Open decision 2 in the architecture doc
- * is whether this is sufficient on its own, or whether it sits on top of a
- * declared allow-list of resources as `iobroker.showcontrol` does today.
+/*
+ * There is no `SurfaceGrant` type either, for the same reason: nothing
+ * registers with this layer, so there is no surface identity to key a grant on.
+ * See `docs/architecture/model.md`, decision 2.
+ *
+ * The registry is the authorization boundary. A semantic action can only reach
+ * a state some administrator bound to it in configuration, so there is no
+ * runtime path from a semantic name to an undeclared state — the property
+ * `iobroker.showcontrol` holds today, preserved by the same mechanism.
+ *
+ * Narrowing below that is ioBroker's own object ACLs on the published semantic
+ * states, which apply uniformly to every consumer — a panel, a script, Blockly,
+ * the REST adapter — rather than only to endpoints that registered here.
  */
-export interface SurfaceGrant {
-    readonly surface: string;
-    readonly role: "readonly" | "control" | "operator" | "admin";
-    /** Resources this surface may act on. `*` is deliberately spelled out. */
-    readonly resources: ReadonlyArray<ResourceId | "*">;
-}

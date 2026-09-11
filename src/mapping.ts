@@ -12,6 +12,7 @@
  *   iobroker.blustream-acm    main.js            v0.3.2
  *   iobroker.blustream-mfp    main.js            v0.5.3
  *   iobroker.blackmagic-atem  src/main.ts        v0.2.9
+ *   iobroker.streamdeck       src/lib/streamdeck-types.ts  v0.5.0 (b8a3b0b)
  */
 
 import type { Resource, ResourceCollection } from "./model";
@@ -120,6 +121,9 @@ export const acmTransmitters: ResourceCollection = {
     owner: "blustream-acm.0",
     members: "blustream-acm.0.transmitters.*",
     nameState: "name",
+    // Redundant with the id segment here (`transmitters.007` routes as `007`),
+    // but the ATEM proves that is not general, so it is always read.
+    valueState: "id",
 };
 
 export const acmReceiver3: Resource = {
@@ -155,6 +159,69 @@ export const acmReceiver3: Resource = {
                 { id: "online", binding: { state: "blustream-acm.0.receivers.rx3.connected" }, presentation: "boolean" },
                 { id: "resolution", binding: { state: "blustream-acm.0.receivers.rx3.resolution" }, presentation: "text" },
             ],
+        },
+    ],
+};
+
+/**
+ * The ACM matrix itself, which exists to carry the broadcast routes.
+ *
+ * These were missed by the first survey — it read the receivers and never looked
+ * at `system.commands.*` — and they are what forced `RouteScope`. Each takes a
+ * transmitter id and routes *every* display, and each belongs to `system` rather
+ * than to any receiver, so there is no destination resource to hang them off.
+ * The matrix is that resource.
+ *
+ * Same value space as a per-receiver route: the adapter runs the written value
+ * through `sanitizeDeviceId`, the same normalisation the per-receiver routing
+ * states get.
+ *
+ * There is no feedback. A broadcast leaves no state of its own to read — what
+ * changes is every receiver's own route — so `display.stage`'s routing feedback
+ * is where the result shows up. This is the ATEM transport split again, in a
+ * shape that has no readable counterpart at all.
+ */
+export const acmMatrix: Resource = {
+    id: "room1.matrix",
+    type: "matrix",
+    name: "Blustream ACM",
+    owner: "blustream-acm.0",
+    capabilities: [
+        {
+            id: "routing",
+            actions: [
+                {
+                    kind: "route",
+                    id: "all",
+                    binding: {
+                        state: "blustream-acm.0.system.commands.routeAll",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    layer: "all",
+                    scope: "all",
+                },
+                {
+                    kind: "route",
+                    id: "allVideo",
+                    binding: {
+                        state: "blustream-acm.0.system.commands.routeAllVideo",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    layer: "video",
+                    scope: "all",
+                },
+                {
+                    kind: "route",
+                    id: "allAudio",
+                    binding: {
+                        state: "blustream-acm.0.system.commands.routeAllAudio",
+                        values: { kind: "resourceIds", collection: "room1.sources" },
+                    },
+                    layer: "audio",
+                    scope: "all",
+                },
+            ],
+            feedback: [],
         },
     ],
 };
@@ -212,12 +279,23 @@ export const mfpMicrophone: Resource = {
 // Blackmagic ATEM — the hardest case, and the one that proved `route`.
 // ---------------------------------------------------------------------------
 
+/**
+ * Corrected 2026-09-11: `members` was `blackmagic-atem.0.input.*`, which does
+ * not exist. The tree is `inputs.input<N>` (`src/main.ts`, "const stateId =
+ * `inputs.input${inputId}`"), so the pattern needs both segments.
+ *
+ * The same correction forced `valueState`. The member id segment is `input3`
+ * but `me0.programInput` takes the number `3`, published as `inputId`. The ACM
+ * differs — `transmitters.007` routes as `007` — so there is no rule that
+ * recovers the value from the id, and it has to be read.
+ */
 export const atemInputs: ResourceCollection = {
     id: "atem.sources",
     type: "video-source",
     owner: "blackmagic-atem.0",
-    members: "blackmagic-atem.0.input.*",
+    members: "blackmagic-atem.0.inputs.input*",
     nameState: "longName",
+    valueState: "inputId",
 };
 
 /**
@@ -310,15 +388,67 @@ export const skyBox: Resource = {
     ],
 };
 
+// ---------------------------------------------------------------------------
+// Stream Deck — a *surface* mapped as an ordinary resource
+// ---------------------------------------------------------------------------
+
+/**
+ * This is the evidence for decision 1: a rendering endpoint needs no `Surface`
+ * interface, because it is a resource like any other.
+ *
+ * `iobroker.streamdeck` already publishes, per deck, exactly the fleet
+ * attributes the brief's section 20 asks for — `currentPageId`, `connected`,
+ * `lastHeartbeat`, `model`, `firmware`, `host` — as ordinary ioBroker states
+ * (`DECK_STATE_SUFFIXES` in `src/lib/streamdeck-types.ts`). So navigating a
+ * panel to a page is a `select` against `currentPageId`, and is the same kind
+ * of operation as switching a projector input. A scene that ends
+ * "…then take the reception panel to the presentation page" needs no second
+ * code path.
+ *
+ * Note `renderManifestJson` and `selectedScreenId` are `write: false` and
+ * adapter-owned, and `groupStateJson` is changed through `commands.setGroupState`
+ * rather than by direct write. None of that is this layer's business — it is
+ * the panel runtime's — which is the point.
+ */
+export const receptionPanel: Resource = {
+    id: "surface.reception",
+    type: "surface",
+    name: "Reception Stream Deck",
+    owner: "streamdeck.0",
+    capabilities: [
+        {
+            id: "navigation",
+            // No `objectStates` here: the page list lives inside the deck's
+            // `layoutJson` document, not in `common.states`. A value space for
+            // this is genuinely unresolved — see `docs/architecture/model.md`.
+            actions: [{ kind: "select", id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" } }],
+            feedback: [{ id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" }, presentation: "text" }],
+        },
+        {
+            id: "health",
+            actions: [],
+            feedback: [
+                { id: "online", binding: { state: "streamdeck.0.decks.reception.connected" }, presentation: "boolean" },
+                { id: "lastSeen", binding: { state: "streamdeck.0.decks.reception.lastHeartbeat" }, presentation: "number" },
+                { id: "model", binding: { state: "streamdeck.0.decks.reception.model" }, presentation: "text" },
+                { id: "firmware", binding: { state: "streamdeck.0.decks.reception.firmware" }, presentation: "text" },
+                { id: "host", binding: { state: "streamdeck.0.decks.reception.host" }, presentation: "text" },
+            ],
+        },
+    ],
+};
+
 export const allMapped: ReadonlyArray<Resource> = [
     iiyamaLobby,
     atlonaSwitcher,
     acmReceiver3,
+    acmMatrix,
     mfpOutput1,
     mfpMicrophone,
     atemProgram,
     atemRecording,
     skyBox,
+    receptionPanel,
 ];
 
 export const allCollections: ReadonlyArray<ResourceCollection> = [acmTransmitters, atemInputs];

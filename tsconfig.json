@@ -4,11 +4,13 @@
         "module": "commonjs",
         "moduleResolution": "node",
         "strict": true,
+        "esModuleInterop": true,
         "noEmit": true,
         "exactOptionalPropertyTypes": true,
         "noUncheckedIndexedAccess": true,
         "forceConsistentCasingInFileNames": true,
-        "types": []
+        "allowImportingTsExtensions": true,
+        "types": ["node"]
     },
     "include": ["src/**/*.ts"]
 }
