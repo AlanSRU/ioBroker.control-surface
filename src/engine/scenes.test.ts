@@ -205,3 +205,68 @@ it("duplicate scene ids are refused", () => {
     const reasons = reasonsFor([sceneOf("same"), sceneOf("same")]);
     assert.match(reasons[0]!, /duplicate id/);
 });
+
+it("waiting for confirmation from a proxy is refused at load", () => {
+    // It can never succeed, so it is a configuration fault rather than a
+    // ninety-second timeout that looks like a device fault.
+    const reasons = reasonsFor([
+        sceneOf("bad", {
+            steps: [
+                {
+                    kind: "waitFor",
+                    resource: "display.meeting",
+                    capability: "power",
+                    feedback: "reachable",
+                    equals: true,
+                    timeoutMs: 90_000,
+                    requireReported: true,
+                },
+            ],
+        }),
+    ]);
+    assert.match(reasons[0]!, /requires a reported reading but .* is declared inferred/);
+});
+
+it("waiting on a proxy is allowed when the scene does not demand a report", () => {
+    // Often it is all there is. The author should be able to accept it.
+    const { problems } = SceneBook.load(
+        [
+            sceneOf("ok", {
+                steps: [
+                    {
+                        kind: "waitFor",
+                        resource: "display.meeting",
+                        capability: "power",
+                        feedback: "reachable",
+                        equals: true,
+                        timeoutMs: 90_000,
+                    },
+                ],
+            }),
+        ],
+        registry,
+    );
+    assert.deepEqual(problems, []);
+});
+
+it("requireReported on a genuine device report is fine", () => {
+    const { problems } = SceneBook.load(
+        [
+            sceneOf("ok", {
+                steps: [
+                    {
+                        kind: "waitFor",
+                        resource: "display.lobby",
+                        capability: "power",
+                        feedback: "power",
+                        equals: true,
+                        timeoutMs: 5000,
+                        requireReported: true,
+                    },
+                ],
+            }),
+        ],
+        registry,
+    );
+    assert.deepEqual(problems, []);
+});

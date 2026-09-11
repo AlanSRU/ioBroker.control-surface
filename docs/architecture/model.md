@@ -280,6 +280,35 @@ rather than `power` in the mapping was right, but nothing in the model lets a
 scene say *"wait for a real report, not a proxy"* — which is exactly what the
 step needed.
 
+### Health and trustworthiness turned out to be different questions
+
+`FeedbackDef` gained `inferred`, and it is deliberately *not* folded into
+`healthy`. The Samsung port check really does succeed — it is a healthy reading
+of the wrong thing — and a renderer that dimmed the control would be saying
+something false. What the operator needs to know is not "this is broken" but
+"this is a guess".
+
+Nothing in ioBroker can supply it. A proxy and a report are the same shape, and
+`common.role` is not reliable enough to carry the difference — the same finding
+that killed Mode 1 discovery applies here. So it is declared by whoever writes
+the mapping, which is the only place the knowledge exists.
+
+**The useful half is a static check.** `waitFor` gained `requireReported`, and a
+scene that demands confirmation from a feedback declared `inferred` is rejected
+when scenes load, with the feedback named. It can never succeed, so it is a
+configuration fault, and it belongs with the cycles and the undeclared actions
+rather than as a ninety-second timeout that looks like a device fault. That
+ninety-second timeout is not hypothetical: it is what the first bench scene
+actually did.
+
+Waiting on a proxy without demanding a report stays legal, because often a proxy
+is all there is and the author should be able to accept it knowingly.
+
+On the published tree it appears in `common.desc`, not in the quality code. An
+inferred reading is not a *bad* one, and none of `STATE_QUALITY`'s substitute
+codes mean this without being stretched — which is the same restraint that kept
+the other four codes honest.
+
 ### Some things genuinely do not generalise, and that is fine
 
 The Blustream MFP microphone mixer exposes `autoBg`, `bgDelay`, `rampUp`,
@@ -634,10 +663,6 @@ already has schedules, scripts and Blockly for it.
   `connected` stays true — and that is a *heartbeat* problem, not a value-age
   one. Closing it properly wants something like TouchBroker's per-binding health
   source rather than a timeout on every reading.
-- **Nothing can mark a reading as inferred rather than reported.** The Samsung
-  TV's `info.available` is a TCP port check standing in for power. A panel
-  showing it cannot tell the operator that the TV is *probably* on, and a scene
-  cannot prefer a real report over a proxy where both exist.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's

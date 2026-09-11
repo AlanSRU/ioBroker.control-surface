@@ -325,3 +325,13 @@ it("every run button maps back to its scene", () => {
     assert.deepEqual([...targets.keys()].sort(), runButtons.sort());
     assert.equal(targets.get("scenes.two.nested.run"), "two.nested");
 });
+
+it("an inferred reading says so in its description", () => {
+    // Not in the quality code: an inferred reading is not a bad one, and none
+    // of STATE_QUALITY's substitute codes mean this without being stretched.
+    const reachable = objectAt(`${ROOT}.display.meeting.power.reachable`).common;
+    assert.match(reachable.desc ?? "", /Inferred, not reported/);
+
+    const reported = objectAt(`${ROOT}.display.lobby.power.power`).common;
+    assert.equal(reported.desc, undefined);
+});

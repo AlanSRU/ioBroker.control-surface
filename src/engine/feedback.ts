@@ -90,17 +90,30 @@ function readDef(
     // `blackmagic-atem` rebuilds its tree from the detected model, so a bound
     // state may simply not be there. That is not an error, and it is the most
     // specific thing that can be said, so it is reported ahead of anything else.
+    const inferred = def.inferred === true;
+
     if (!snapshot) {
-        return { ...base, value: null, raw: null, healthy: false, unhealthy: "unresolved", timestamp: 0 };
+        return {
+            ...base,
+            value: null,
+            raw: null,
+            healthy: false,
+            unhealthy: "unresolved",
+            inferred,
+            timestamp: 0,
+        };
     }
 
     const raw = snapshot.val;
     const value = semanticValue(def, raw, registry, source);
     const reason = unhealthyReason(resource, snapshot, registry, source);
 
+    // Deliberately not folded into `healthy`. A port check that really did
+    // succeed is a healthy reading of the wrong thing, and a renderer that
+    // dimmed it would be saying something false.
     return reason === undefined
-        ? { ...base, value, raw, healthy: true, timestamp: snapshot.ts }
-        : { ...base, value, raw, healthy: false, unhealthy: reason, timestamp: snapshot.ts };
+        ? { ...base, value, raw, healthy: true, inferred, timestamp: snapshot.ts }
+        : { ...base, value, raw, healthy: false, unhealthy: reason, inferred, timestamp: snapshot.ts };
 }
 
 /**

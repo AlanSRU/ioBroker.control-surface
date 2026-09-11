@@ -124,9 +124,18 @@ function stepProblems(
             }
 
             case "waitFor": {
-                if (!registry.getFeedback(step.resource, step.capability, step.feedback)) {
+                const feedback = registry.getFeedback(step.resource, step.capability, step.feedback);
+                if (!feedback) {
                     faults.push(
                         `${at} waits on undeclared feedback "${step.resource}.${step.capability}.${step.feedback}"`,
+                    );
+                } else if (step.requireReported === true && feedback.inferred === true) {
+                    // Decidable here, and only here: nothing about the device's
+                    // behaviour can turn a proxy into a report, so a runtime
+                    // check would just be a slower way to reach the same answer.
+                    faults.push(
+                        `${at} requires a reported reading but ` +
+                            `"${step.resource}.${step.capability}.${step.feedback}" is declared inferred`,
                     );
                 }
                 if (step.timeoutMs <= 0) {

@@ -198,6 +198,20 @@ export interface FeedbackDef {
     readonly binding: StateBinding;
     /** How a renderer should read it: a label, a lamp, a number, a selection. */
     readonly presentation: "text" | "boolean" | "number" | "selection";
+    /**
+     * True when this reading is *inferred* rather than reported by the device.
+     *
+     * Declared by whoever writes the mapping, because nothing in ioBroker says
+     * it — a proxy and a report are the same shape, and `common.role` is not
+     * reliable enough to carry the difference either.
+     *
+     * The case that forced it: `samsung_tizen.0.info.available` is a TCP port
+     * check that a Samsung TV **answers while in standby**, so it reads `true`
+     * for a set that is off. A reading like that is perfectly healthy — the
+     * check really did succeed — and still cannot confirm what a scene wants
+     * confirmed. Health and trustworthiness are different questions.
+     */
+    readonly inferred?: boolean;
 }
 
 /** An observed value. Runtime, not model. */
@@ -217,6 +231,8 @@ export interface FeedbackValue {
      */
     readonly raw: StateValue | null;
     readonly healthy: boolean;
+    /** True when the declaration says this is a proxy, not a device report. */
+    readonly inferred: boolean;
     /** Why not. Present exactly when `healthy` is false. */
     readonly unhealthy?: UnhealthyReason;
     /** When the device last reported. 0 means it never has. */
@@ -277,6 +293,15 @@ export type SequenceStep =
           readonly equals: unknown;
           readonly timeoutMs: number;
           readonly onFailure?: FailurePolicy;
+          /**
+           * Refuse to be satisfied by an inferred reading.
+           *
+           * Checked when scenes are loaded, not while one runs: a wait for
+           * confirmation from a feedback declared `inferred` can never succeed,
+           * so it is a configuration fault and belongs with the other faults
+           * decidable without touching a device.
+           */
+          readonly requireReported?: boolean;
       }
     | {
           readonly kind: "parallel";

@@ -670,9 +670,18 @@ export const samsungTv: Resource = {
                 { kind: "set", id: "off", binding: { state: "samsung_tizen.0.control.KEY_POWEROFF" }, value: true },
                 { kind: "set", id: "toggle", binding: { state: "samsung_tizen.0.control.KEY_POWER" }, value: true },
             ],
-            // Named `reachable`, not `power`, because that is what it measures.
+            // Named `reachable`, not `power`, because that is what it measures —
+            // and `inferred`, because the TV answers that port *while in
+            // standby*, so it reads true for a set that is off. Verified on the
+            // hardware: the adapter's own `KEY_POWERON` consults the same state
+            // and concludes "TV is already on" about a TV that is not.
             feedback: [
-                { id: "reachable", binding: { state: "samsung_tizen.0.info.available" }, presentation: "boolean" },
+                {
+                    id: "reachable",
+                    binding: { state: "samsung_tizen.0.info.available" },
+                    presentation: "boolean",
+                    inferred: true,
+                },
             ],
         },
         {

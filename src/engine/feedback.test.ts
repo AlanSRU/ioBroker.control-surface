@@ -30,6 +30,7 @@ it("a healthy boolean reads back as a boolean, not as text", () => {
         value: true,
         raw: true,
         healthy: true,
+        inferred: false,
         timestamp: NOW,
     });
 });
@@ -143,4 +144,22 @@ it("a one-way remote contributes no readings at all", () => {
         readAll(registry, treeOf({})).some(r => r.resource === "lounge.skybox"),
         false,
     );
+});
+
+it("an inferred reading is still healthy, and says so separately", () => {
+    // The Samsung port check really does succeed; it is a healthy reading of the
+    // wrong thing. Folding that into `healthy` would make a renderer dim a
+    // control for a reason that is not true.
+    const tree = treeOf({
+        values: { "samsung_tizen.0.info.available": true },
+    });
+    const reading = read("display.meeting", "power", "reachable", registry, tree);
+    assert.equal(reading?.value, true);
+    assert.equal(reading?.healthy, true);
+    assert.equal(reading?.inferred, true);
+});
+
+it("a reading nobody flagged is reported, not inferred", () => {
+    const tree = treeOf({ values: { ...owners, "iiyama-prolite.0.power": true } });
+    assert.equal(read("display.lobby", "power", "power", registry, tree)?.inferred, false);
 });

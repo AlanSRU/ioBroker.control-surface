@@ -161,6 +161,13 @@ export function objectsFor(registry: Registry, source: ObjectSource): ReadonlyAr
                         ...presentationCommon(feedback.presentation, registry, source, feedback.binding),
                         read: true,
                         write: false,
+                        // Said in the description rather than the quality code:
+                        // an inferred reading is not a *bad* one, and none of
+                        // `STATE_QUALITY`'s substitute codes mean this without
+                        // being stretched. Panels and operators read `desc`.
+                        ...(feedback.inferred === true
+                            ? { desc: "Inferred, not reported by the device — treat as a proxy" }
+                            : {}),
                     },
                 });
             }
