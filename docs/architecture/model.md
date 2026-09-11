@@ -130,6 +130,45 @@ the transmitter list has not loaded, the reading is the raw `007` and stays
 healthy: the device is reporting correctly and only the label is missing. A
 panel showing `007` is degraded; a panel showing nothing is wrong.
 
+### A scene cycle has to be caught before the scene starts
+
+Scenes nest, and `fallback` hands control to another scene too, so a cycle is
+reachable two ways — and the fallback route is much harder to spot by eye. A
+runner that discovers one at runtime has already begun doing things to
+equipment, and there is no good way to unwind that. `SceneBook.load` therefore
+walks the reference graph statically, through both `scene` steps and `fallback`
+policies, and rejects every scene in a cycle.
+
+The same pass takes the other decidable faults with it: an action no resource
+declares, a wait on undeclared feedback, a fallback to a scene that does not
+exist, a `waitFor` with a zero timeout, a `retry` of zero times. Each of those
+is a typo that would otherwise surface mid-show.
+
+A scene is dropped **whole** where a bad resource is dropped individually. The
+reasoning inverts because the risk does: half a resource registry is still
+usable, whereas half a scene leaves equipment in a state nobody designed.
+
+### `fallback` replaces the rest of a scene; it does not resume it
+
+Written down because the first implementation got it wrong and a test caught it.
+Running the backup and then carrying on with the original scene's remaining
+steps is almost never wanted — those steps were aimed at the projector that just
+died. So a successful fallback ends the scene, and the run still counts as
+completed, because switching to the backup *is* the designed outcome rather than
+a degraded one.
+
+That distinction is why a step's result is not a boolean. "Stop, and that is
+fine" and "stop, this failed" are different answers.
+
+### `waitFor` must require a healthy reading
+
+An unacknowledged value that happens to equal the target is a command somebody
+wrote, not the device confirming anything. A scene that carried on from one
+would be acting on an assumption at the exact moment it explicitly asked not
+to — which is the entire reason the step exists. So the match requires
+`healthy`, and this is where the feedback engine's `UnhealthyReason` earns its
+keep beyond rendering.
+
 ### Some things genuinely do not generalise, and that is fine
 
 The Blustream MFP microphone mixer exposes `autoBg`, `bgDelay`, `rampUp`,
@@ -436,15 +475,27 @@ things fall out of the findings above:
 
 Phase 1 is therefore: resource registry, binding resolver (three value-space
 forms, unresolved bindings), action engine, feedback engine, state publisher,
-sequence engine. `showcontrol`'s cue runner is prior art for the last.
+sequence engine. `showcontrol`'s cue runner is prior art for the last, and two
+of its decisions carried over unchanged: steps run sequentially unless something
+says otherwise, and a dispatched step is reported as *dispatched* rather than as
+*worked*.
+
+Everything on that list except the state publisher now exists and is tested.
+The publisher is what forces the adapter shell, and it is the only remaining
+piece that cannot be written without ioBroker present.
 
 ## Still unanswered
 
 - The repository name is not settled, and unlike `iobroker.showcontrol` it has
   had no npm or adapter-catalogue availability check.
-- Scenes reference resources by id; nothing yet says what happens when a scene
-  references a resource whose binding is unresolved at execution time. The
-  `FailurePolicy` shapes exist but the engine semantics do not.
+- ~~Scenes reference resources by id; nothing yet says what happens when a scene
+  references a resource whose binding is unresolved at execution time.~~
+  Answered by splitting it in two. A reference that can *never* work — an
+  undeclared action, an unknown scene, a cycle — is a configuration fault,
+  decidable without touching a device, and `SceneBook.load` rejects the scene
+  outright. A binding unresolved *right now* is a runtime condition nothing
+  static can predict, it surfaces as a `refused` step failure, and
+  `FailurePolicy` decides what happens next. Default is `abort`.
 - `ResourceCollection` assumes members are discoverable from the object tree by
   pattern. That holds for Blustream and ATEM. It has not been checked against an
   adapter that publishes a list as a single JSON state — ATEM's

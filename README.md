@@ -6,8 +6,10 @@ existing adapters keep owning their devices, and this sits above them so that
 protocol answers.
 
 **Status: the two decisions that were blocking implementation are settled, and
-the engine core has started.** The registry and the binding resolver exist and
-are tested; there is no ioBroker adapter yet. See
+the engine core is built.** Registry, resolver, action engine, feedback engine
+and sequence engine all exist and are tested, with no ioBroker anywhere near
+them. The state publisher is the remaining Phase 1 piece, and it is the one that
+forces an adapter. See
 [`docs/architecture/model.md`](docs/architecture/model.md).
 
 The name is free on npm and absent from the ioBroker adapter catalogue as of
@@ -23,6 +25,8 @@ The name is free on npm and absent from the ioBroker adapter catalogue as of
 | [`src/engine/resolver.ts`](src/engine/resolver.ts) | Semantic values ↔ device values, for all three `ValueSpace` forms. |
 | [`src/engine/actions.ts`](src/engine/actions.ts) | An invocation becomes the writes that carry it out, or a typed refusal. |
 | [`src/engine/feedback.ts`](src/engine/feedback.ts) | The read direction, and why a reading should or should not be trusted. |
+| [`src/engine/scenes.ts`](src/engine/scenes.ts) | Scene validation: the faults findable before a device is touched. |
+| [`src/engine/sequence.ts`](src/engine/sequence.ts) | Running a scene — delays, waits, retries, fallbacks. |
 | [`docs/architecture/model.md`](docs/architecture/model.md) | What the mapping proved, what it broke, and the two settled decisions. |
 | [`docs/architecture/iobroker-react.md`](docs/architecture/iobroker-react.md) | The production venue system assessed against the model — crossover, and what this layer would take off it. |
 
