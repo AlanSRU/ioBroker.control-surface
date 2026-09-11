@@ -308,6 +308,43 @@ takes a free string the adapter turns into `KEY_<VALUE>`, so there is no
 `common.states` to read and no runtime collection to resolve; the explicit table
 is the only one of the three forms that fits. All three now have a real example.
 
+### `requireReported` does not catch an optimistic ack, and that is a third question
+
+Found by running the scene it was built for, and it qualifies the claim above.
+
+`samsungtv` writes `state.power` to the *requested* value the moment a command
+is handled, acknowledged, before the TV has done anything — measured on the
+bench at two seconds after the write, `state.power` already read `false` while
+the set was still on. Polling corrects it afterwards, but the correction lags
+the poll interval: after an external wake, `state.power` read `true` for roughly
+twenty-four seconds while the TV sat in standby.
+
+So the scene that "completed" with `requireReported: true` was partly hollow. It
+matched an optimistic acknowledgement rather than a confirmed device state, and
+it would have completed just as happily had the TV failed to wake.
+
+That is a *third* property, distinct from the two already modelled:
+
+- `healthy` — can this reading be trusted at all
+- `inferred` — is this reading a proxy for something else
+- **unnamed** — has the device actually confirmed this, or is it the adapter's
+  own intent echoed back
+
+`ack: true` is supposed to carry the third, and on this adapter it does not.
+Nothing in the model can currently tell the difference, because nothing can:
+the optimistic write and a genuine report are byte-identical.
+
+TouchBroker recorded this same limitation from the other direction —
+*"`health` cannot express write confirmation"*, with a fader whose writes are
+accepted and go nowhere — and reached the same proposed shape, a binding-level
+`confirmWithinMs`. Two projects hitting one wall from opposite sides is the
+strongest argument yet that it is real and worth a model change rather than a
+workaround.
+
+Not built here. The honest interim is that a scene waiting on a state its own
+previous step just wrote is waiting on itself, and a `delay` before the
+`waitFor` is the crude fix.
+
 ### Health and trustworthiness turned out to be different questions
 
 `FeedbackDef` gained `inferred`, and it is deliberately *not* folded into
@@ -691,6 +728,10 @@ already has schedules, scripts and Blockly for it.
   `connected` stays true — and that is a *heartbeat* problem, not a value-age
   one. Closing it properly wants something like TouchBroker's per-binding health
   source rather than a timeout on every reading.
+- **Write confirmation.** See the optimistic-ack finding above: nothing
+  distinguishes a device report from an adapter echoing its own intent.
+  TouchBroker wants the same thing and proposes `confirmWithinMs`. Whatever is
+  built should be designed against both cases at once.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's
