@@ -8,8 +8,7 @@ protocol answers.
 **Status: Phase 1 is built.** Registry, resolver, action engine, feedback
 engine, sequence engine and state publisher all exist and are tested with no
 ioBroker anywhere near them; the adapter applies them. It has not yet been run
-against live equipment, the admin UI is JSON rather than a builder, and the
-icon is still the scaffold placeholder. See
+against live equipment and the admin UI is JSON rather than a builder. See
 [`docs/architecture/model.md`](docs/architecture/model.md).
 
 The name is free on npm and absent from the ioBroker adapter catalogue as of
