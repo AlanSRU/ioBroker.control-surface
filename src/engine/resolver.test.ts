@@ -7,23 +7,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import type { ObjectSource, Options, StateMeta, StateValue, ValueOption } from "./resolver.ts";
+import type { Options, ValueOption } from "./resolver.ts";
 import { optionsFor, toDevice, toSemantic } from "./resolver.ts";
+import { treeOf } from "./testing.ts";
 import { Registry } from "./registry.ts";
 import { acmTransmitters, atemInputs } from "../mapping.ts";
-
-/** An object tree stubbed from literals, so tests state their own fixtures. */
-function treeOf(opts: {
-    meta?: Record<string, StateMeta>;
-    members?: Record<string, string[]>;
-    values?: Record<string, StateValue>;
-}): ObjectSource {
-    return {
-        metaOf: id => opts.meta?.[id],
-        membersOf: pattern => opts.members?.[pattern],
-        valueOf: id => opts.values?.[id],
-    };
-}
 
 const collections = Registry.load([], [acmTransmitters, atemInputs]).registry;
 

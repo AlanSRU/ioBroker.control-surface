@@ -8,25 +8,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { ActionInvocation } from "../model.ts";
-import type { ObjectSource, StateMeta, StateValue } from "./resolver.ts";
+import type { StateValue } from "../model.ts";
 import type { Plan, StateWrite } from "./actions.ts";
 import { plan } from "./actions.ts";
 import { Registry } from "./registry.ts";
 import { allCollections, allMapped } from "../mapping.ts";
+import { treeOf } from "./testing.ts";
 
 const { registry } = Registry.load(allMapped, allCollections);
 
-function treeOf(opts: {
-    meta?: Record<string, StateMeta>;
-    members?: Record<string, string[]>;
-    values?: Record<string, StateValue>;
-}): ObjectSource {
-    return {
-        metaOf: id => opts.meta?.[id],
-        membersOf: pattern => opts.members?.[pattern],
-        valueOf: id => opts.values?.[id],
-    };
-}
 
 const empty = treeOf({});
 

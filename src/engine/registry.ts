@@ -177,12 +177,45 @@ export class Registry {
     }
 
     /**
-     * Whether a state may be touched at all. Collection member states are
-     * excluded deliberately: they are discovered by pattern at runtime, so they
-     * are resolved through `ObjectSource`, never written.
+     * Whether a state may be **written**. Collection member states are excluded
+     * deliberately: they are discovered by pattern at runtime, so they are
+     * resolved through `ObjectSource`, never written.
      */
     permits(state: StateId): boolean {
         return this.states.has(state);
+    }
+
+    /**
+     * Where a resource's owning adapter reports whether it is connected.
+     *
+     * Derived from `Resource.owner` rather than declared, because
+     * `<instance>.info.connection` is an ioBroker convention that costs nothing
+     * to try and that most adapters honour. An adapter that does not publish it
+     * simply reads as unknown — never as offline, which would mark every one of
+     * its resources unhealthy for following a different convention.
+     *
+     * @param resource - Semantic resource id
+     * @returns The connection state id, or undefined for an unknown resource
+     */
+    ownerConnection(resource: ResourceId): StateId | undefined {
+        const owner = this.resources.get(resource)?.owner;
+        return owner === undefined ? undefined : `${owner}.info.connection`;
+    }
+
+    /**
+     * Every state worth subscribing to: the declared bindings, plus the owner
+     * connection states health is derived from.
+     *
+     * Deliberately wider than `permits()`. Reading the connection flag of an
+     * adapter already named as an owner is within the whitelist's purpose;
+     * making it *writable* would not be.
+     */
+    observedStates(): ReadonlySet<StateId> {
+        const observed = new Set<StateId>(this.states);
+        for (const resource of this.resources.values()) {
+            observed.add(`${resource.owner}.info.connection`);
+        }
+        return observed;
     }
 }
 

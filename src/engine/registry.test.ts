@@ -38,6 +38,29 @@ test("the whitelist is exactly the declared bindings", () => {
     assert.equal(registry.permits("admin.0.info.connection"), false);
 });
 
+test("the observation set is wider than the write whitelist", () => {
+    const { registry } = Registry.load(allMapped, allCollections);
+    const observed = registry.observedStates();
+
+    // Owner connection states are derived, never declared by a binding, and are
+    // how health is decided — so they must be subscribed but must not be
+    // writable.
+    assert.ok(observed.has("atlona-sw510w.0.info.connection"));
+    assert.equal(registry.permits("atlona-sw510w.0.info.connection"), false);
+
+    // Everything writable is also observed.
+    for (const state of registry.boundStates()) {
+        assert.ok(observed.has(state), `${state} is writable but not observed`);
+    }
+});
+
+test("owner connection follows the ioBroker convention", () => {
+    const { registry } = Registry.load(allMapped, allCollections);
+    assert.equal(registry.ownerConnection("display.lobby"), "iiyama-prolite.0.info.connection");
+    assert.equal(registry.ownerConnection("surface.reception"), "streamdeck.0.info.connection");
+    assert.equal(registry.ownerConnection("nope"), undefined);
+});
+
 test("collection member states are not writable through the whitelist", () => {
     // Members are discovered by pattern and read through ObjectSource. They are
     // sources of values, never targets.

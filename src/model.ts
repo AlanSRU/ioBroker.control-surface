@@ -19,6 +19,9 @@
 /** A fully qualified foreign state id, e.g. `iiyama-prolite.0.power`. */
 export type StateId = string;
 
+/** What an ioBroker state can hold. `role: 'json'` states are strings. */
+export type StateValue = string | number | boolean;
+
 /**
  * How the semantic value space maps onto the device's own value space.
  *
@@ -190,11 +193,37 @@ export interface FeedbackValue {
     readonly resource: ResourceId;
     readonly capability: CapabilityId;
     readonly feedback: string;
-    readonly value: unknown;
-    /** False when the source state is stale, unacknowledged or the owner is down. */
+    /** Mapped through the value space where one applies; null when unknown. */
+    readonly value: StateValue | null;
     readonly healthy: boolean;
+    /** Why not. Present exactly when `healthy` is false. */
+    readonly unhealthy?: UnhealthyReason;
+    /** When the device last reported. 0 means it never has. */
     readonly timestamp: number;
 }
+
+/**
+ * Why an observed value should not be trusted.
+ *
+ * A renderer needs this, not just the boolean: "the adapter is down" and "this
+ * control has never reported" call for different things on screen, and
+ * TouchBroker's `onUnhealthy` already distinguishes dim from hide.
+ *
+ * Staleness is deliberately absent. The model comment here used to claim it,
+ * but nothing says what window is right — `operatingHours` moves hourly and
+ * `power` may not move for weeks — and the one concrete case, a Stream Deck
+ * whose Pi dies without clearing `connected`, is a heartbeat problem rather
+ * than a value-age one. See `docs/architecture/model.md`.
+ */
+export type UnhealthyReason =
+    /** The bound state does not exist. Normal for `blackmagic-atem` on reconnect. */
+    | "unresolved"
+    /** The state exists but has never carried a value. */
+    | "never-reported"
+    /** The value is an unconfirmed command, not the device reporting. */
+    | "unacknowledged"
+    /** The owning adapter's `info.connection` is false. */
+    | "owner-offline";
 
 // ---------------------------------------------------------------------------
 // Scenes and sequences

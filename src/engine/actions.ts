@@ -107,8 +107,8 @@ function valueFor(
             return { value: action.value };
 
         case "toggle": {
-            const current = source.valueOf(action.binding.state);
-            if (current === undefined) {
+            const current = source.snapshotOf(action.binding.state)?.val;
+            if (current === undefined || current === null) {
                 // Nothing to invert. This is the honest answer for a state that
                 // has not reported yet — guessing `true` would be a coin flip
                 // that turns equipment on during a show.

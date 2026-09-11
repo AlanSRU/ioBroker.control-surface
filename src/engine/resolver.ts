@@ -11,11 +11,10 @@
  * without an ioBroker running.
  */
 
-import type { ResourceCollection, StateBinding, StateId, ValueSpace } from "../model.ts";
+import type { ResourceCollection, StateBinding, StateId, StateValue, ValueSpace } from "../model.ts";
 import type { Registry } from "./registry.ts";
 
-/** Anything an ioBroker state can hold that this layer cares about. */
-export type StateValue = string | number | boolean;
+export type { StateValue };
 
 /** One choice offered by a value space. */
 export interface ValueOption {
@@ -38,8 +37,24 @@ export interface ObjectSource {
     metaOf(state: StateId): StateMeta | undefined;
     /** Object ids matching a members pattern, or undefined when unknown. */
     membersOf(pattern: string): ReadonlyArray<StateId> | undefined;
-    /** Current value of a state, or undefined when it does not exist. */
-    valueOf(state: StateId): StateValue | undefined;
+    /** Current state, or undefined when no such state exists. */
+    snapshotOf(state: StateId): StateSnapshot | undefined;
+}
+
+/**
+ * An ioBroker state as read back.
+ *
+ * `ack` is load-bearing rather than incidental: `true` means the device or its
+ * adapter is reporting, `false` means someone wrote a command that has not been
+ * confirmed. Feedback that ignores the difference presents an intention as a
+ * fact.
+ */
+export interface StateSnapshot {
+    /** null when the state exists but has never carried a value. */
+    readonly val: StateValue | null;
+    readonly ack: boolean;
+    /** Milliseconds since the epoch; 0 when never reported. */
+    readonly ts: number;
 }
 
 /** The parts of an ioBroker object's `common` the resolver needs. */
@@ -126,14 +141,14 @@ function memberOption(member: StateId, collection: ResourceCollection, source: O
     // `inputs.input3` and routes as `3`. Fall back to the segment only when no
     // `valueState` is declared.
     const value = collection.valueState !== undefined
-        ? source.valueOf(`${member}.${collection.valueState}`) ?? segment
+        ? source.snapshotOf(`${member}.${collection.valueState}`)?.val ?? segment
         : segment;
 
     const name = collection.nameState !== undefined
-        ? source.valueOf(`${member}.${collection.nameState}`)
+        ? source.snapshotOf(`${member}.${collection.nameState}`)?.val
         : undefined;
 
-    return { name: name === undefined || name === "" ? String(value) : String(name), value };
+    return { name: name === undefined || name === null || name === "" ? String(value) : String(name), value };
 }
 
 /**

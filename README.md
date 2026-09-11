@@ -22,6 +22,7 @@ The name is free on npm and absent from the ioBroker adapter catalogue as of
 | [`src/engine/registry.ts`](src/engine/registry.ts) | The declared resources, and the only states this layer may touch. |
 | [`src/engine/resolver.ts`](src/engine/resolver.ts) | Semantic values ↔ device values, for all three `ValueSpace` forms. |
 | [`src/engine/actions.ts`](src/engine/actions.ts) | An invocation becomes the writes that carry it out, or a typed refusal. |
+| [`src/engine/feedback.ts`](src/engine/feedback.ts) | The read direction, and why a reading should or should not be trusted. |
 | [`docs/architecture/model.md`](docs/architecture/model.md) | What the mapping proved, what it broke, and the two settled decisions. |
 | [`docs/architecture/iobroker-react.md`](docs/architecture/iobroker-react.md) | The production venue system assessed against the model — crossover, and what this layer would take off it. |
 

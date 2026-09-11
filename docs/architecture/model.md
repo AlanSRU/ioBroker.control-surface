@@ -105,6 +105,31 @@ uses. A rendering endpoint is a thing that can be controlled and observed, which
 is the definition of a resource. `Surface`, `SurfaceCapabilities`, `SurfaceState`
 and `SurfaceGrant` are deleted accordingly.
 
+### Feedback has to say *why* it should not be trusted
+
+Found while writing the feedback engine. A boolean `healthy` is not enough for
+the thing per-binding health exists to prevent: "the adapter is down", "this has
+never reported" and "someone wrote a command that has not been confirmed" want
+different things on screen, and TouchBroker's `onUnhealthy` already
+distinguishes dim from hide. `FeedbackValue` therefore carries an
+`UnhealthyReason` alongside the flag.
+
+Two orderings fell out of it, both of which could reasonably have gone the other
+way:
+
+- **An offline owner outranks the reasons it causes.** An adapter that is down
+  explains every one of its resources at once, so reporting `owner-offline`
+  beats reporting `unacknowledged` on each of them separately.
+- **An adapter that publishes no `info.connection` reads as healthy, not as
+  offline.** `<instance>.info.connection` is a convention, not a guarantee.
+  Failing closed would mark every resource of a well-behaved adapter unhealthy
+  for following a different convention, which is worse than assuming nothing.
+
+The unmappable-value case went the same way. When an ACM route reads `007` and
+the transmitter list has not loaded, the reading is the raw `007` and stays
+healthy: the device is reporting correctly and only the label is missing. A
+panel showing `007` is degraded; a panel showing nothing is wrong.
+
 ### Some things genuinely do not generalise, and that is fine
 
 The Blustream MFP microphone mixer exposes `autoBg`, `bgDelay`, `rampUp`,
@@ -398,7 +423,10 @@ things fall out of the findings above:
 - **There is no Surface Registry and no WebSocket server.** Cut both, per
   decision 1. Surfaces are resources; consumers are ioBroker clients.
 - **State publication is a Phase 1 component**, and it is the one that was not on
-  the brief's list. It is what makes everything else reachable.
+  the brief's list. It is what makes everything else reachable. `readAll` is
+  what it walks, and `Registry.observedStates()` is what it subscribes to —
+  deliberately wider than the write whitelist, because owner connection states
+  are derived rather than declared.
 - **The semantic layer must be an adapter, not a library.** `iobroker-react`
   implements its binding resolver three times — in `src/VenueConfig.js`, in
   `AreaSchedulerService.js` and in `MacroSchedulerService.js` — because ioBroker
@@ -431,6 +459,16 @@ sequence engine. `showcontrol`'s cue runner is prior art for the last.
 - **Whether a resource can declare the destinations it serves**, which is what a
   synthesised broadcast would need where no broadcast state exists. The larger
   half of this gap closed with `RouteScope`.
+- **Staleness is not computed, and the model no longer claims it is.**
+  `FeedbackValue`'s comment used to say a reading is unhealthy when "stale,
+  unacknowledged or the owner is down". The engine computes the last two and
+  cannot compute the first: nothing says what window is right, and one window
+  cannot fit both `operatingHours`, which moves hourly, and `power`, which may
+  not move for weeks. The one concrete case is a Stream Deck whose Pi service
+  dies without clearing `connected` — `lastHeartbeat` reveals it while
+  `connected` stays true — and that is a *heartbeat* problem, not a value-age
+  one. Closing it properly wants something like TouchBroker's per-binding health
+  source rather than a timeout on every reading.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's
