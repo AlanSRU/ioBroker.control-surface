@@ -214,7 +214,7 @@ it("waiting for confirmation from a proxy is refused at load", () => {
             steps: [
                 {
                     kind: "waitFor",
-                    resource: "display.meeting",
+                    resource: "display.meeting-tizen",
                     capability: "power",
                     feedback: "reachable",
                     equals: true,
@@ -235,7 +235,7 @@ it("waiting on a proxy is allowed when the scene does not demand a report", () =
                 steps: [
                     {
                         kind: "waitFor",
-                        resource: "display.meeting",
+                        resource: "display.meeting-tizen",
                         capability: "power",
                         feedback: "reachable",
                         equals: true,

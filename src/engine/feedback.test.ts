@@ -153,7 +153,7 @@ it("an inferred reading is still healthy, and says so separately", () => {
     const tree = treeOf({
         values: { "samsung_tizen.0.info.available": true },
     });
-    const reading = read("display.meeting", "power", "reachable", registry, tree);
+    const reading = read("display.meeting-tizen", "power", "reachable", registry, tree);
     assert.equal(reading?.value, true);
     assert.equal(reading?.healthy, true);
     assert.equal(reading?.inferred, true);
@@ -162,4 +162,30 @@ it("an inferred reading is still healthy, and says so separately", () => {
 it("a reading nobody flagged is reported, not inferred", () => {
     const tree = treeOf({ values: { ...owners, "iiyama-prolite.0.power": true } });
     assert.equal(read("display.lobby", "power", "power", registry, tree)?.inferred, false);
+});
+
+it("the same TV reads inferred through one adapter and reported through the other", () => {
+    // The evidence for `inferred` being a property of the binding rather than
+    // of the device. Both readings below describe one physical set in standby:
+    // samsung_tizen's port check says it is on, samsungtv's reported state says
+    // it is off, and the second is the one a scene may demand.
+    const tree = treeOf({
+        values: {
+            "samsung_tizen.0.info.available": true,
+            "samsungtv.0.meetingtv.state.power": false,
+            "samsungtv.0.meetingtv.info.online": true,
+        },
+    });
+
+    const proxy = read("display.meeting-tizen", "power", "reachable", registry, tree);
+    assert.equal(proxy?.value, true);
+    assert.equal(proxy?.inferred, true);
+
+    const reported = read("display.meeting", "power", "power", registry, tree);
+    assert.equal(reported?.value, false);
+    assert.equal(reported?.inferred, false);
+
+    // Reachability bound as reachability is a report, not a proxy — the same
+    // role as the tizen state, and correctly not flagged.
+    assert.equal(read("display.meeting", "health", "online", registry, tree)?.inferred, false);
 });

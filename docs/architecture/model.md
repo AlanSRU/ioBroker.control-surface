@@ -23,8 +23,8 @@ mapped are pinned in that file's header.
 
 Verified against: iiyama-prolite 0.1.6, atlona-sw510w 0.1.0, blustream-acm
 0.3.2, blustream-mfp 0.5.3, blackmagic-atem 0.2.9, sky-remote 1.0.6, streamdeck
-0.5.0. Ten resources and two collections across six adapter instances, 64
-bindings.
+0.5.0, samsungtv 0.0.28. Eleven resources and two collections across seven
+adapter instances, 86 bindings.
 
 ## What the mapping proved
 
@@ -279,6 +279,34 @@ adapter at all once it is in network standby. Naming that feedback `reachable`
 rather than `power` in the mapping was right, but nothing in the model lets a
 scene say *"wait for a real report, not a proxy"* — which is exactly what the
 step needed.
+
+### The same TV, two adapters, and what that settles
+
+`display.meeting` now binds `iobroker.samsungtv`; `display.meeting-tizen` keeps
+the `iobroker.samsung_tizen` binding for the same physical set. Both are in the
+mapping on purpose, because the contrast is the evidence for `inferred`.
+
+With the TV in standby, `samsung_tizen.0.info.available` read **true** and
+`samsungtv.0.meetingtv.state.power` read **false**. One is a TCP port check the
+TV answers while asleep; the other is a reported state. A scene that demands
+`requireReported` is refused against the first and loads against the second —
+verified on the running instance, same scene shape both times.
+
+**`inferred` is a property of the binding, not of the state.** `samsungtv`'s
+`info.online` carries `role: "indicator.reachable"`, exactly like the tizen
+state, and is *not* flagged — because it is bound as `health.online`, where
+reachability is the thing being reported. It would only be a proxy if it were
+bound as power.
+
+`samsungtv` also separates `control.*` from `state.*` from `info.*` natively,
+which is the `ActionDef` / `FeedbackDef` split reached independently by another
+author's adapter — the strongest outside evidence the split is right that this
+project has.
+
+Its `source` is the mapping's first use of a `table` value space. `control.source`
+takes a free string the adapter turns into `KEY_<VALUE>`, so there is no
+`common.states` to read and no runtime collection to resolve; the explicit table
+is the only one of the three forms that fits. All three now have a real example.
 
 ### Health and trustworthiness turned out to be different questions
 

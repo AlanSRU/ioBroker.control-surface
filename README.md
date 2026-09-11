@@ -38,8 +38,9 @@ input that routes by `inputId` rather than by its object id, a Blustream C66
 whose input ids are zero-padded strings.
 
 Mapped so far: Blackmagic ATEM, Blustream ACM, Blustream MFP, Atlona SW510W,
-iiyama ProLite, a Sky box and a Stream Deck — ten resources and two collections
-across six adapter instances, 64 bindings. Every state id was read out of adapter
+iiyama ProLite, a Sky box, a Stream Deck and a Samsung TV through two different
+adapters — eleven resources and two collections across seven adapter instances,
+86 bindings. Every state id was read out of adapter
 source, and the versions are pinned in `src/mapping.ts`.
 
 ## The two decisions, settled

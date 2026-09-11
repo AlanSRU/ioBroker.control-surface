@@ -14,6 +14,7 @@
  *   iobroker.blackmagic-atem  src/main.ts        v0.2.9
  *   iobroker.streamdeck       src/lib/streamdeck-types.ts  v0.5.0 (b8a3b0b)
  *   iobroker.samsung_tizen    main.js            v1.2.0
+ *   iobroker.samsungtv        main.js            v0.0.28 (4248d59)
  */
 
 import type { Resource, ResourceCollection } from "./model";
@@ -632,7 +633,97 @@ export const receptionPanel: Resource = {
 };
 
 // ---------------------------------------------------------------------------
-// Samsung Tizen TV — verified against real hardware, and the first to be
+// Samsung TV, twice: the same physical set through two adapters
+// ---------------------------------------------------------------------------
+
+/**
+ * A Samsung UE43DU7100KXXU through `iobroker.samsungtv`, which is the binding
+ * to prefer and the one the bench now runs.
+ *
+ * This adapter separates command from truth natively — `control.*` writes,
+ * `state.*` reports, `info.*` identifies — which is the `ActionDef` /
+ * `FeedbackDef` split arrived at independently by someone else's adapter. Power
+ * is the case that matters: `control.power` is absolute and writable, and
+ * `state.power` is a **reported** boolean that read `false` for a set in standby
+ * at the same moment the other adapter's proxy read `true`.
+ *
+ * `source` is the mapping's first use of a `table` value space. `control.source`
+ * takes a free string that the adapter turns into `KEY_<VALUE>`, so there is no
+ * `common.states` to read and no runtime collection to resolve — the table is
+ * the only form that fits.
+ *
+ * `info.online` is bound as `health.online` and is **not** marked inferred, even
+ * though it is `role: "indicator.reachable"` exactly like the other adapter's
+ * proxy. That is the distinction: `inferred` describes the *binding*, not the
+ * state. Read as "is it reachable" this is a direct report; it would only be a
+ * proxy if it were bound as power.
+ */
+export const samsungTvModern: Resource = {
+    id: "display.meeting",
+    type: "display",
+    name: "Meeting Room TV",
+    owner: "samsungtv.0",
+    capabilities: [
+        {
+            id: "power",
+            actions: [
+                { kind: "set", id: "on", binding: { state: "samsungtv.0.meetingtv.control.power" }, value: true },
+                { kind: "set", id: "off", binding: { state: "samsungtv.0.meetingtv.control.power" }, value: false },
+                { kind: "set", id: "wake", binding: { state: "samsungtv.0.meetingtv.control.wol" }, value: true },
+            ],
+            // A real report, so a scene may demand it with `requireReported`.
+            feedback: [
+                { id: "power", binding: { state: "samsungtv.0.meetingtv.state.power" }, presentation: "boolean" },
+            ],
+        },
+        {
+            id: "source",
+            actions: [
+                {
+                    kind: "route",
+                    id: "select",
+                    binding: {
+                        state: "samsungtv.0.meetingtv.control.source",
+                        values: {
+                            kind: "table",
+                            entries: [
+                                { name: "HDMI1", value: "HDMI1" },
+                                { name: "HDMI2", value: "HDMI2" },
+                                { name: "HDMI3", value: "HDMI3" },
+                                { name: "HDMI4", value: "HDMI4" },
+                            ],
+                        },
+                    },
+                    layer: "all",
+                },
+            ],
+            // The adapter removes `state.source`; there is nothing to read back.
+            feedback: [],
+        },
+        {
+            id: "volume",
+            actions: [
+                { kind: "level", id: "set", binding: { state: "samsungtv.0.meetingtv.control.volume" }, min: 0, max: 100 },
+                { kind: "toggle", id: "mute", binding: { state: "samsungtv.0.meetingtv.control.muted" } },
+            ],
+            feedback: [
+                { id: "volume", binding: { state: "samsungtv.0.meetingtv.state.volume" }, presentation: "number" },
+                { id: "muted", binding: { state: "samsungtv.0.meetingtv.state.muted" }, presentation: "boolean" },
+            ],
+        },
+        {
+            id: "health",
+            actions: [],
+            feedback: [
+                { id: "online", binding: { state: "samsungtv.0.meetingtv.info.online" }, presentation: "boolean" },
+                { id: "paired", binding: { state: "samsungtv.0.meetingtv.info.paired" }, presentation: "boolean" },
+            ],
+        },
+    ],
+};
+
+// ---------------------------------------------------------------------------
+// The same TV through iobroker.samsung_tizen — kept as the contrast
 // ---------------------------------------------------------------------------
 
 /**
@@ -658,9 +749,9 @@ export const receptionPanel: Resource = {
  * inferred rather than reported, which is a real gap and is recorded as one.
  */
 export const samsungTv: Resource = {
-    id: "display.meeting",
+    id: "display.meeting-tizen",
     type: "display",
-    name: "Meeting Room TV",
+    name: "Meeting Room TV (via samsung_tizen)",
     owner: "samsung_tizen.0",
     capabilities: [
         {
@@ -721,6 +812,7 @@ export const allMapped: ReadonlyArray<Resource> = [
     skyBox,
     receptionPanel,
     samsungTv,
+    samsungTvModern,
 ];
 
 export const allCollections: ReadonlyArray<ResourceCollection> = [acmTransmitters, atemInputs];
