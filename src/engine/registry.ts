@@ -43,6 +43,9 @@ export interface RegistryLoad {
  */
 const VALID_SEMANTIC_ID = /^[^*\s[\]]+$/;
 
+/** Published as `resources.<id>.healthy`, so no capability may take the name. */
+export const RESERVED_CAPABILITY = "healthy";
+
 /** Rejects `a..b`, a leading `.` and a trailing `.`, which make empty segments. */
 const EMPTY_SEGMENT = /(^\.)|(\.\.)|(\.$)/;
 
@@ -239,7 +242,44 @@ function validateCapabilities(
             problems.push({ where, reason: `duplicate capability "${capability.id}"` });
             continue;
         }
+        if (capability.id === RESERVED_CAPABILITY) {
+            problems.push({
+                where,
+                reason: `capability "${RESERVED_CAPABILITY}" is reserved for the published health state`,
+            });
+            continue;
+        }
         seenCapabilities.add(capability.id);
+
+        // Capability, action and feedback ids become single path segments under
+        // the resource, so a dot in one would silently create a tree level and
+        // make the published id ambiguous to split back apart.
+        const named = [
+            ...capability.actions.map(a => ["action", a.id] as const),
+            ...capability.feedback.map(f => ["feedback", f.id] as const),
+        ];
+        const dotted = [["capability", capability.id] as const, ...named].filter(([, id]) => id.includes("."));
+        for (const [what, id] of dotted) {
+            problems.push({ where, reason: `${what} id "${id}" may not contain a dot` });
+        }
+        if (dotted.length > 0) {
+            continue;
+        }
+
+        // An action and a feedback may share an id — `routing.video` is both the
+        // route and the reading of it — and they then publish as one read/write
+        // state. That only works if they name the same device state.
+        for (const action of capability.actions) {
+            const twin = capability.feedback.find(f => f.id === action.id);
+            if (twin && twin.binding.state !== action.binding.state) {
+                problems.push({
+                    where,
+                    reason:
+                        `"${capability.id}.${action.id}" is both an action and a feedback but binds two different ` +
+                        `states ("${action.binding.state}" and "${twin.binding.state}"); give one of them another id`,
+                });
+            }
+        }
 
         const seenActions = new Set<string>();
         for (const action of capability.actions) {

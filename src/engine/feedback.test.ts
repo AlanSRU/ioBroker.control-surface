@@ -29,6 +29,7 @@ test("a healthy boolean reads back as a boolean, not as text", () => {
         capability: "power",
         feedback: "power",
         value: true,
+        raw: true,
         healthy: true,
         timestamp: NOW,
     });

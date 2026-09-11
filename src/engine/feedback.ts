@@ -91,15 +91,16 @@ function readDef(
     // state may simply not be there. That is not an error, and it is the most
     // specific thing that can be said, so it is reported ahead of anything else.
     if (!snapshot) {
-        return { ...base, value: null, healthy: false, unhealthy: "unresolved", timestamp: 0 };
+        return { ...base, value: null, raw: null, healthy: false, unhealthy: "unresolved", timestamp: 0 };
     }
 
-    const value = semanticValue(def, snapshot.val, registry, source);
+    const raw = snapshot.val;
+    const value = semanticValue(def, raw, registry, source);
     const reason = unhealthyReason(resource, snapshot, registry, source);
 
     return reason === undefined
-        ? { ...base, value, healthy: true, timestamp: snapshot.ts }
-        : { ...base, value, healthy: false, unhealthy: reason, timestamp: snapshot.ts };
+        ? { ...base, value, raw, healthy: true, timestamp: snapshot.ts }
+        : { ...base, value, raw, healthy: false, unhealthy: reason, timestamp: snapshot.ts };
 }
 
 /**

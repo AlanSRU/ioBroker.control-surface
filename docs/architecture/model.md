@@ -169,6 +169,56 @@ to — which is the entire reason the step exists. So the match requires
 `healthy`, and this is where the feedback engine's `UnhealthyReason` earns its
 keep beyond rendering.
 
+### The published tree carries device values, not semantic names
+
+Decided while writing the publisher, and it went against the first instinct.
+
+Publishing `display.lobby.source = "HDMI2"` looks like the point of the whole
+project. It is not, because the model deliberately refuses a universal
+vocabulary (section 29) — so "HDMI2" is whatever the iiyama happens to call it,
+and an Atlona need not agree. A name is no more portable than a number, and it
+is worse in one specific way: for a `resourceIds` space the name is a display
+label, and two transmitters may share one.
+
+So the tree publishes the raw device value with `common.states` supplying the
+labels, which is the idiom every existing ioBroker consumer already reads —
+vis, Blockly, and TouchBroker's `map: {fromStates: true}`. The semantic gain is
+the *addressing* and the *grouping*: `display.lobby` instead of
+`iiyama-prolite.0`, capabilities instead of a flat tree. Scenes still work in
+names, because that is what a person writes, and the action engine accepts
+either. `FeedbackValue` gained a `raw` beside `value` for this reason.
+
+### Publishing has rules that are checked, not chosen
+
+The published `common` is constrained by what `repochecker` accepts, and three
+of those constraints are not obvious:
+
+- `value` is a **read-only** number; a writable one must be `level`, and a
+  write-only `level` fails E1010. So a level action publishes `read: true`.
+- A momentary trigger must be `button` with `read: false`. `power.on` means
+  "do the on thing", never "are you on", so `set` and `toggle` publish that way
+  and are never readable.
+- Every intermediate `folder`, `device` and `channel` must be created
+  explicitly. ioBroker tolerates an orphan state at runtime, so a missing parent
+  looks fine until E3009 fires against a live object dump.
+
+Worth noting the direction: this layer *publishes* roles while refusing to
+*read* them. Role inference is what the mapping disproved; emitting one as a
+hint for renderers is the opposite direction and costs nothing.
+
+### The C66 trap has two entrances
+
+The rule that value coercion must follow `common.type` rather than the shape of
+a key was established for the resolver. The publisher reintroduced the same bug
+by a different route — deriving the published `common.type` from whether the
+`common.states` keys *looked* numeric, which makes a Blustream C66's `"007"`
+into `7` and produces a value the device rejects.
+
+The fix is to trust the resolved options' own types, since `optionsFor` has
+already coerced them correctly. The general lesson is that this trap is not a
+one-off: anywhere a device value meets a type decision, the declared type
+decides. Both entrances now have a test named after the device.
+
 ### Some things genuinely do not generalise, and that is fine
 
 The Blustream MFP microphone mixer exposes `autoBg`, `bgDelay`, `rampUp`,
@@ -480,9 +530,12 @@ of its decisions carried over unchanged: steps run sequentially unless something
 says otherwise, and a dispatched step is reported as *dispatched* rather than as
 *worked*.
 
-Everything on that list except the state publisher now exists and is tested.
-The publisher is what forces the adapter shell, and it is the only remaining
-piece that cannot be written without ioBroker present.
+Everything on that list now exists and is tested, and all of it is pure. What
+remains is the adapter shell itself: `io-package.json`, the lifecycle,
+subscriptions over `observedStates()`, applying `objectsFor`/`statesFor`, and
+routing `onStateChange` through `writeTargets` into the action engine. The
+engine does not decide *when* anything runs — that is a trigger, and ioBroker
+already has schedules, scripts and Blockly for it.
 
 ## Still unanswered
 

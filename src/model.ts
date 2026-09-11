@@ -195,6 +195,15 @@ export interface FeedbackValue {
     readonly feedback: string;
     /** Mapped through the value space where one applies; null when unknown. */
     readonly value: StateValue | null;
+    /**
+     * The value as the device reported it, before the value space.
+     *
+     * Both are needed and neither is redundant. A scene waits on the semantic
+     * name, because that is what a person writes; the published state tree
+     * carries the raw value with `common.states` supplying the labels, because
+     * that is what every existing ioBroker consumer already understands.
+     */
+    readonly raw: StateValue | null;
     readonly healthy: boolean;
     /** Why not. Present exactly when `healthy` is false. */
     readonly unhealthy?: UnhealthyReason;
