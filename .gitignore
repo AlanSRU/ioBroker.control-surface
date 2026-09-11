@@ -1,2 +1,27 @@
-node_modules/
+# No dot-directories except github/vscode
+.*/
+!.vscode/
+!.github/
+
+*.code-workspace
+node_modules
+
+# Build output
 build/
+
+# Local design notes. docs/architecture/ IS tracked — it is repository
+# documentation per the brief's section 49. Only the private planning
+# brief and the agent notes are held back.
+docs/brief.md
+**/CLAUDE.md
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db

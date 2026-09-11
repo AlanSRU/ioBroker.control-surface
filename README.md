@@ -22,6 +22,11 @@ had no npm or adapter-catalogue availability check.
 point: the mapping compiles only if the model can represent equipment that
 actually exists.
 
+Mapped so far: Blackmagic ATEM, Blustream ACM, Blustream MFP, Atlona SW510W,
+iiyama ProLite and a Sky box — eight resources and two collections across five
+adapter instances, 54 bindings. Every state id was read out of adapter source,
+and the versions are pinned in `src/mapping.ts`.
+
 ## The two decisions blocking implementation
 
 1. **Does TouchBroker provide the surface layer?** Its existing layout schema,
