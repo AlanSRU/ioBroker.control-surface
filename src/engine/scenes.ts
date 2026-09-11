@@ -18,6 +18,7 @@
 
 import type { Scene, SequenceStep } from "../model";
 import type { Registry, RegistryProblem } from "./registry";
+import { idProblem } from "./registry";
 
 export interface SceneLoad {
     readonly book: SceneBook;
@@ -48,8 +49,11 @@ export class SceneBook {
         const byId = new Map<string, Scene>();
 
         for (const scene of scenes) {
-            if (!scene.id) {
-                problems.push({ where: "scene", reason: "has no id" });
+            // Scenes publish as `scenes.<id>`, so they inherit the object-id
+            // rules resources already follow.
+            const bad = idProblem(scene.id);
+            if (bad) {
+                problems.push({ where: "scene", reason: bad });
                 continue;
             }
             if (byId.has(scene.id)) {

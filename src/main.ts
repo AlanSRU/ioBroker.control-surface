@@ -19,8 +19,8 @@ import { SceneBook } from "./engine/scenes";
 import type { ObjectSource, StateMeta, StateSnapshot } from "./engine/resolver";
 import type { StateWrite } from "./engine/actions";
 import { plan } from "./engine/actions";
-import type { ActionTarget, PublishedState } from "./engine/publisher";
-import { objectsFor, ROOT, statesFor, writeTargets } from "./engine/publisher";
+import type { ActionTarget, PublishedState, SceneStatus } from "./engine/publisher";
+import { objectsFor, ROOT, SCENES, sceneObjectsFor, sceneTargets, statesFor, writeTargets } from "./engine/publisher";
 import type { Effects } from "./engine/sequence";
 import { run } from "./engine/sequence";
 
@@ -32,6 +32,10 @@ class ControlSurface extends utils.Adapter {
     private registry = Registry.load([], []).registry;
     private scenes = SceneBook.load([], this.registry).book;
     private targets: ReadonlyMap<string, ActionTarget> = new Map();
+    private sceneRuns: ReadonlyMap<string, string> = new Map();
+
+    /** Scenes currently running, so a double press cannot interleave two. */
+    private readonly running = new Set<string>();
 
     /** Last value published per id, so unchanged states are not rewritten. */
     private readonly published = new Map<string, string>();
@@ -73,6 +77,7 @@ class ControlSurface extends utils.Adapter {
         }
 
         this.targets = writeTargets(this.registry);
+        this.sceneRuns = sceneTargets(this.scenes.all());
         this.log.info(
             `${this.registry.allResources().length} resources, ${this.scenes.all().length} scenes, ` +
                 `${this.registry.observedStates().size} states observed`,
@@ -88,6 +93,7 @@ class ControlSurface extends utils.Adapter {
         }
         // Our own published tree, so a panel's write becomes an invocation.
         this.subscribeStates(`${ROOT}.*`);
+        this.subscribeStates(`${SCENES}.*`);
 
         await this.setState("info.connection", { val: true, ack: true });
     }
@@ -275,6 +281,42 @@ class ControlSurface extends utils.Adapter {
         for (const state of statesFor(this.registry, source)) {
             await this.publishState(state);
         }
+
+        for (const object of sceneObjectsFor(this.scenes.all())) {
+            const { name, desc } = object.common;
+            if (object.type === "state") {
+                await this.extendObject(object.id, {
+                    type: "state",
+                    common: object.common as ioBroker.StateCommon,
+                    native: {},
+                });
+            } else {
+                await this.extendObject(object.id, {
+                    type: object.type === "channel" ? "channel" : "folder",
+                    common: desc === undefined ? { name } : { name, desc },
+                    native: {},
+                });
+            }
+        }
+
+        // Seed each status once. Written only if absent, so a restart does not
+        // wipe the record of what happened before it.
+        for (const scene of this.scenes.all()) {
+            const id = `${SCENES}.${scene.id}.status`;
+            if (!(await this.getStateAsync(id))) {
+                await this.setStatus(scene.id, "idle");
+            }
+        }
+    }
+
+    /**
+     * Records what a scene is doing.
+     *
+     * @param scene - Scene id
+     * @param status - What it is doing
+     */
+    private async setStatus(scene: string, status: SceneStatus): Promise<void> {
+        await this.setState(`${SCENES}.${scene}.status`, { val: status, ack: true });
     }
 
     /**
@@ -302,7 +344,19 @@ class ControlSurface extends utils.Adapter {
             return;
         }
 
-        const target = this.targets.get(id.slice(this.namespace.length + 1));
+        const local = id.slice(this.namespace.length + 1);
+
+        const scene = this.sceneRuns.get(local);
+        if (scene !== undefined) {
+            // Momentary, like showcontrol's cue trigger: only a truthy,
+            // unacknowledged write is a command.
+            if (!state.ack && state.val) {
+                void this.runScene(scene);
+            }
+            return;
+        }
+
+        const target = this.targets.get(local);
         if (target) {
             // Only an unacknowledged write is a command. Our own acked
             // publications come back through here and must be ignored, or the
@@ -379,22 +433,40 @@ class ControlSurface extends utils.Adapter {
      * @param id - Scene to run
      */
     public async runScene(id: string): Promise<void> {
+        // A second press while the first run is still going would interleave two
+        // sets of writes to the same equipment, which on a live stage is worse
+        // than doing nothing. Ignoring is the safe answer, but it must be said
+        // out loud or an operator will think the button is broken.
+        if (this.running.has(id)) {
+            this.log.warn(`Scene "${id}" is already running; ignoring this trigger`);
+            return;
+        }
+        this.running.add(id);
+        await this.setStatus(id, "running");
+
         const effects: Effects = {
             write: writes => this.applyWrites(writes),
             sleep: ms => new Promise(resolve => this.setTimeout(() => resolve(), ms)),
             source: () => this.source(),
         };
 
-        const report = await run(id, this.scenes, this.registry, effects);
-        for (const failure of report.failures) {
-            this.log.warn(
-                `Scene "${failure.scene}" step ${failure.step} failed ` +
-                    `(${failure.reason.kind}, handled by ${failure.handled})`,
+        try {
+            const report = await run(id, this.scenes, this.registry, effects);
+            for (const failure of report.failures) {
+                this.log.warn(
+                    `Scene "${failure.scene}" step ${failure.step} failed ` +
+                        `(${failure.reason.kind}, handled by ${failure.handled})`,
+                );
+            }
+            this.log[report.completed ? "info" : "error"](
+                `Scene "${id}" ${report.completed ? "completed" : "did not complete"}`,
             );
+            await this.setStatus(id, report.completed ? "completed" : "failed");
+        } finally {
+            // Always released: a scene stuck marked running can never be fired
+            // again, which is a worse failure than the one that caused it.
+            this.running.delete(id);
         }
-        this.log[report.completed ? "info" : "error"](
-            `Scene "${id}" ${report.completed ? "completed" : "did not complete"}`,
-        );
     }
 
     /**

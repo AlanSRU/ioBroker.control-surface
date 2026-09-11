@@ -18,7 +18,7 @@
  * Pure, like the rest: it returns a description, and the adapter applies it.
  */
 
-import type { ActionDef, CapabilityId, ResourceId, StateValue } from "../model";
+import type { ActionDef, CapabilityId, ResourceId, Scene, StateValue } from "../model";
 import type { ObjectSource } from "./resolver";
 import { optionsFor } from "./resolver";
 import { read } from "./feedback";
@@ -26,6 +26,9 @@ import type { Registry } from "./registry";
 
 /** Root of the published tree, below the adapter's own namespace. */
 export const ROOT = "resources";
+
+/** Where scenes are published. */
+export const SCENES = "scenes";
 
 /** Published under each resource; `registry.ts` reserves the capability name. */
 const HEALTH = "healthy";
@@ -391,4 +394,104 @@ function spaceOf(
         type: resolved.options.every(o => typeof o.value === "number") ? "number" : "string",
         states: Object.fromEntries(resolved.options.map(o => [String(o.value), o.name])),
     };
+}
+
+// ---------------------------------------------------------------------------
+// Scenes
+// ---------------------------------------------------------------------------
+
+/**
+ * What a scene is doing.
+ *
+ * `showcontrol` names its equivalent `fired` and labels it "Dispatched", on the
+ * grounds that the cue's actions went out without throwing and that says
+ * nothing about whether the show is still playing. A scene here is different:
+ * it owns its own duration — delays, waits, retries — so `running` and
+ * `completed` mean what they say.
+ */
+export type SceneStatus = "idle" | "running" | "completed" | "failed";
+
+/**
+ * Published as `common.states`, so a panel renders the status without
+ * hardcoding either the value set or its wording.
+ */
+export const SCENE_STATUS_LABELS: Readonly<Record<SceneStatus, string>> = {
+    idle: "Idle",
+    running: "Running",
+    completed: "Completed",
+    // "Failed" covers a step that aborted; a scene whose failure was handled by
+    // a fallback completes, because the fallback is the designed outcome.
+    failed: "Failed",
+};
+
+/**
+ * Every object a scene needs, parents included.
+ *
+ * A scene id may contain dots exactly as a resource id may, so
+ * `presentation.start` publishes as `scenes.presentation.start` and the
+ * intermediate folders are emitted here for the same E3009 reason.
+ *
+ * @param scenes - The validated scenes
+ * @returns Objects in parent-before-child order
+ */
+export function sceneObjectsFor(scenes: ReadonlyArray<Scene>): ReadonlyArray<PublishedObject> {
+    if (scenes.length === 0) {
+        return [];
+    }
+
+    const objects: PublishedObject[] = [{ id: SCENES, type: "folder", common: { name: "Scenes" } }];
+    const emitted = new Set<string>([SCENES]);
+
+    for (const scene of scenes) {
+        const segments = scene.id.split(".");
+        segments.slice(0, -1).forEach((_, index) => {
+            const id = `${SCENES}.${segments.slice(0, index + 1).join(".")}`;
+            if (!emitted.has(id)) {
+                emitted.add(id);
+                objects.push({ id, type: "folder", common: { name: segments[index]! } });
+            }
+        });
+
+        const base = `${SCENES}.${scene.id}`;
+        objects.push({ id: base, type: "channel", common: { name: scene.name || scene.id } });
+        objects.push({
+            id: `${base}.run`,
+            type: "state",
+            common: {
+                name: "Run",
+                type: "boolean",
+                // Momentary, exactly like an action: firing a scene is not a
+                // question about whether it is running.
+                role: "button",
+                read: false,
+                write: true,
+                desc: "Write true to run this scene",
+            },
+        });
+        objects.push({
+            id: `${base}.status`,
+            type: "state",
+            common: {
+                name: "Status",
+                type: "string",
+                role: "text",
+                read: true,
+                write: false,
+                states: SCENE_STATUS_LABELS,
+                desc: "Idle until first run; failed means a step aborted the scene",
+            },
+        });
+    }
+
+    return objects;
+}
+
+/**
+ * Which scene a write to each published `run` state fires.
+ *
+ * @param scenes - The validated scenes
+ * @returns Published state id to scene id
+ */
+export function sceneTargets(scenes: ReadonlyArray<Scene>): ReadonlyMap<string, string> {
+    return new Map(scenes.map(scene => [`${SCENES}.${scene.id}.run`, scene.id]));
 }

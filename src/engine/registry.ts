@@ -41,7 +41,16 @@ export const RESERVED_CAPABILITY = "healthy";
 /** Rejects `a..b`, a leading `.` and a trailing `.`, which make empty segments. */
 const EMPTY_SEGMENT = /(^\.)|(\.\.)|(\.$)/;
 
-function idProblem(id: string): string | null {
+/**
+ * Checks an id that will become an ioBroker object id.
+ *
+ * Exported because scenes are published into the same tree and inherit exactly
+ * the same constraints.
+ *
+ * @param id - The semantic id to check
+ * @returns Why it is unusable, or null
+ */
+export function idProblem(id: string): string | null {
     if (!id) {
         return "has no id";
     }

@@ -422,3 +422,38 @@ it("the brief's presentation scene runs end to end", async () => {
         { state: "streamdeck.0.decks.reception.currentPageId", value: "presentation", ack: false },
     ]);
 });
+
+it("waitFor accepts the device value as well as the semantic name", () => {
+    // `do` already takes either when writing, so requiring the name here made a
+    // scene that routes by 1 wait on "Camera 1". The first scene written against
+    // real hardware fell straight into it.
+    const tree = new FakeTree({
+        values: { ...connected, "blustream-acm.0.receivers.rx3.videoRoute": "007" },
+        members: { "blustream-acm.0.transmitters.*": ["blustream-acm.0.transmitters.007"] },
+    });
+    tree.set("blustream-acm.0.transmitters.007.id", "007");
+    tree.set("blustream-acm.0.transmitters.007.name", "Laptop");
+
+    const waitOn = (equals: unknown): Scene => ({
+        id: "s",
+        name: "s",
+        steps: [
+            {
+                kind: "waitFor",
+                resource: "display.stage",
+                capability: "routing",
+                feedback: "video",
+                equals,
+                timeoutMs: 200,
+            },
+        ],
+    });
+
+    return Promise.all([
+        run("s", bookOf([waitOn("Laptop")]), registry, recorderOn(tree)),
+        run("s", bookOf([waitOn("007")]), registry, recorderOn(tree)),
+    ]).then(([byName, byValue]) => {
+        assert.equal(byName.completed, true, "the semantic name should match");
+        assert.equal(byValue.completed, true, "the device value should match too");
+    });
+});

@@ -249,6 +249,37 @@ readable state, `info.available`, is `role: "indicator.reachable"` filled from a
 TCP port check — a proxy for power, not a report of it. **The model cannot say
 that a reading is inferred rather than reported**, and that is a real gap.
 
+### A scene run on the bench, and what it exposed
+
+Six steps against the real ATEM — route, wait for the mixer to confirm, delay,
+route again, wait again, start recording — completed with status going
+`running` to `completed`. Before it did, two things came out of it.
+
+**`waitFor` was asymmetric with `do`, and it took a real scene to notice.**
+`toDevice` accepts either the semantic name or the device's own value when a
+step writes one, but `waitFor` compared only against the name. So a scene that
+routes by `1` had to wait on `"Camera 1"`, and the first scene written against
+hardware did exactly the wrong one: step one switched the mixer and step two
+timed out waiting for the value it had just set. Both directions now accept
+both forms. The engine was thoroughly tested and still had this, because the
+asymmetry is only visible to someone *authoring* a scene.
+
+**The first attempt failed correctly, which was worth as much as the success.**
+An earlier scene waited on a Samsung TV coming back from standby, timed out at
+exactly its declared 90 seconds, aborted, and left the remaining step unrun —
+the ATEM was not switched. Failure policy, timeout and reporting all behaved as
+designed on live equipment.
+
+That failure also produced the clearest evidence yet for the inferred-reading
+gap. `samsung_tizen` has no state that reliably reports power:
+`info.available` is a TCP port check that the TV **answers while in standby**,
+so it reads `true` for a set that is off. Its `KEY_POWERON` consults the same
+state and concludes "TV is already on", so the TV cannot be woken through the
+adapter at all once it is in network standby. Naming that feedback `reachable`
+rather than `power` in the mapping was right, but nothing in the model lets a
+scene say *"wait for a real report, not a proxy"* — which is exactly what the
+step needed.
+
 ### Some things genuinely do not generalise, and that is fine
 
 The Blustream MFP microphone mixer exposes `autoBg`, `bgDelay`, `rampUp`,

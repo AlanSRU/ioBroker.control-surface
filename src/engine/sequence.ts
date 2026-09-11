@@ -274,6 +274,12 @@ async function attemptStep(
  * scene that carried on from one would be acting on an assumption at the exact
  * moment it asked not to.
  *
+ * Matches the semantic name *or* the device's own value, because `toDevice`
+ * already accepts either when a step writes one. Without that, a scene that
+ * routes by `1` has to wait on `"Camera 1"`, and the first real scene written
+ * against hardware fell into exactly that trap: step one switched the mixer and
+ * step two timed out waiting for a value it had just set.
+ *
  * @param step - The wait
  * @param registry - The declared resources
  * @param effects - Waits and the object tree
@@ -291,7 +297,8 @@ async function waitFor(
     for (;;) {
         const reading = read(step.resource, step.capability, step.feedback, registry, effects.source());
         last = reading?.value ?? null;
-        if (reading?.healthy && String(reading.value) === wanted) {
+        const matched = reading !== undefined && (String(reading.value) === wanted || String(reading.raw) === wanted);
+        if (reading?.healthy && matched) {
             return undefined;
         }
         if (waited >= step.timeoutMs) {

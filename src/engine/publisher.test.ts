@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 
 import { Registry } from "./registry";
 import type { PublishedObject } from "./publisher";
-import { objectsFor, ROOT, statesFor, writeTargets } from "./publisher";
+import { objectsFor, ROOT, sceneObjectsFor, sceneTargets, statesFor, writeTargets } from "./publisher";
 import { allCollections, allMapped } from "../mapping";
 import { treeOf } from "./testing";
 
@@ -263,4 +263,65 @@ it("objects and states cover the same published ids", () => {
         .map(s => s.id)
         .sort();
     assert.deepEqual(stateIds, objectIds);
+});
+
+// ---------------------------------------------------------------------------
+// Scenes
+// ---------------------------------------------------------------------------
+
+it("scenes publish a momentary run button and a readable status", () => {
+    const objects = sceneObjectsFor([{ id: "presentation.start", name: "Start Presentation", steps: [] }]);
+    const byId = new Map(objects.map(o => [o.id, o]));
+
+    // Dotted scene ids become tree levels, exactly like resource ids.
+    assert.equal(byId.get("scenes")?.type, "folder");
+    assert.equal(byId.get("scenes.presentation")?.type, "folder");
+    assert.equal(byId.get("scenes.presentation.start")?.type, "channel");
+
+    const run = byId.get("scenes.presentation.start.run")?.common;
+    assert.deepEqual(
+        { type: run?.type, role: run?.role, read: run?.read, write: run?.write },
+        { type: "boolean", role: "button", read: false, write: true },
+    );
+
+    const status = byId.get("scenes.presentation.start.status")?.common;
+    assert.equal(status?.read, true);
+    assert.equal(status?.write, false);
+    // Published so a panel needs no hardcoded vocabulary, as showcontrol does.
+    assert.deepEqual(Object.keys(status?.states ?? {}), ["idle", "running", "completed", "failed"]);
+});
+
+it("scene parents are published before their children", () => {
+    const objects = sceneObjectsFor([
+        { id: "a.one", name: "one", steps: [] },
+        { id: "a.two", name: "two", steps: [] },
+    ]);
+    const seen = new Set<string>();
+    for (const object of objects) {
+        const parent = object.id.slice(0, object.id.lastIndexOf("."));
+        if (parent !== "" && object.id !== "scenes") {
+            assert.ok(seen.has(parent), `${object.id} published before ${parent}`);
+        }
+        seen.add(object.id);
+    }
+    // The shared folder is emitted once, not per scene.
+    assert.equal(objects.filter(o => o.id === "scenes.a").length, 1);
+});
+
+it("no scenes means no scene tree at all", () => {
+    assert.deepEqual(sceneObjectsFor([]), []);
+});
+
+it("every run button maps back to its scene", () => {
+    const scenes = [
+        { id: "one", name: "one", steps: [] },
+        { id: "two.nested", name: "two", steps: [] },
+    ];
+    const targets = sceneTargets(scenes);
+    const runButtons = sceneObjectsFor(scenes)
+        .filter(o => o.type === "state" && o.common.write === true)
+        .map(o => o.id);
+
+    assert.deepEqual([...targets.keys()].sort(), runButtons.sort());
+    assert.equal(targets.get("scenes.two.nested.run"), "two.nested");
 });
