@@ -16,8 +16,7 @@ Every state id in it was read out of the adapter's source, and the versions
 mapped are pinned in that file's header.
 
 Verified against: iiyama-prolite 0.1.6, atlona-sw510w 0.1.0, blustream-acm
-0.3.2, blustream-mfp 0.5.3, blackmagic-atem 0.2.9, sky-remote 1.0.6, plus an
-omoda state dump.
+0.3.2, blustream-mfp 0.5.3, blackmagic-atem 0.2.9, sky-remote 1.0.6.
 
 ## What the mapping proved
 
@@ -52,10 +51,16 @@ have been a breaking change later.
 
 ### Actions and feedback need separate bindings
 
-The AV adapters mostly write and read the same state, which hides this. The
-vehicle does not: `commands.lock` is written, `doors.locked` is read. Binding
-therefore sits on each `ActionDef` and each `FeedbackDef`, never once per
-capability.
+Most states surveyed are read/write and echo an acknowledged value back, which
+hides this. The ATEM does not: `recording.start`, `recording.stop` and
+`recording.switchDisk` are `read: false, write: true` buttons, while the
+observable truth is `recording.status`. The adapter states the split itself in
+the description on `macros.run` — *"write-only trigger, use macros.runningIndex
+to read the active macro"*.
+
+Binding therefore sits on each `ActionDef` and each `FeedbackDef`, never once
+per capability. A capability-level binding would have made ATEM transport
+inexpressible.
 
 ### Declaration and invocation had to be split
 
@@ -197,8 +202,8 @@ The semantic layer does not automatically inherit this. Sections 16, 21 and 31
 describe runtime resolution of semantic names, and self-registering surfaces
 reporting their own capabilities.
 
-The mapping gives the cost side of this concretely. Nine resources and two
-collections across six adapter instances needed **56 explicit bindings**, for
+The mapping gives the cost side of this concretely. Eight resources and two
+collections across five adapter instances needed **54 explicit bindings**, for
 what is a partial mapping of a single room. That is the real number to reason
 about: small enough that a declared registry is clearly workable, large enough
 that hand-authoring it for a venue would be tedious without a builder UI to
@@ -252,3 +257,10 @@ runner is prior art for the last of these.
   pattern. That holds for Blustream and ATEM. It has not been checked against an
   adapter that publishes a list as a single JSON state — ATEM's
   `tally.programInputs` is `role: 'json'`, so that case exists nearby.
+- **The mapping is now entirely AV.** The brief's section 35 valued a
+  completely different resource domain as proof the vocabulary is genuinely
+  open, and that case is no longer covered: sky-remote is the least AV-shaped
+  resource mapped, and it is still an entertainment device. The model permits
+  arbitrary capability ids by construction, but nothing tests it. `mixergy`
+  (hot water cylinder) or `transport-edinburgh` (transit data) would close this
+  cheaply if it is worth closing.

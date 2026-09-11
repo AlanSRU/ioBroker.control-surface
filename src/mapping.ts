@@ -243,9 +243,16 @@ export const atemProgram: Resource = {
 };
 
 /**
- * Recording is a transport, not a source or a level. It maps cleanly, which is
- * reassuring — but `recording.status` is an enum whose meaning lives in the
- * adapter, so the surface depends on `common.states` being published.
+ * Recording is a transport, and it is the clearest verified case of an action
+ * and its feedback binding to *different* states: `recording.start` and
+ * `recording.stop` are `read: false, write: true` buttons, while the observable
+ * truth is `recording.status`. The adapter's own `macros.run` carries the same
+ * split in its description — "write-only trigger, use macros.runningIndex to
+ * read the active macro". This is why binding sits on each `ActionDef` and each
+ * `FeedbackDef` rather than once per capability.
+ *
+ * `recording.status` is an enum whose meaning lives in the adapter, so the
+ * surface depends on `common.states` being published.
  */
 export const atemRecording: Resource = {
     id: "atem.recording",
@@ -254,7 +261,11 @@ export const atemRecording: Resource = {
     capabilities: [
         {
             id: "transport",
-            actions: [],
+            actions: [
+                { kind: "set", id: "start", binding: { state: "blackmagic-atem.0.recording.start" }, value: true },
+                { kind: "set", id: "stop", binding: { state: "blackmagic-atem.0.recording.stop" }, value: true },
+                { kind: "set", id: "switchDisk", binding: { state: "blackmagic-atem.0.recording.switchDisk" }, value: true },
+            ],
             feedback: [
                 { id: "status", binding: { state: "blackmagic-atem.0.recording.status", values: { kind: "objectStates" } }, presentation: "selection" },
                 { id: "duration", binding: { state: "blackmagic-atem.0.recording.duration" }, presentation: "number" },
@@ -265,7 +276,7 @@ export const atemRecording: Resource = {
 };
 
 // ---------------------------------------------------------------------------
-// Deliberate non-AV stress cases
+// Stress case: control without any feedback at all
 // ---------------------------------------------------------------------------
 
 /**
@@ -299,40 +310,6 @@ export const skyBox: Resource = {
     ],
 };
 
-/**
- * A vehicle: capabilities with no AV meaning whatsoever, mostly read-only, and
- * under a per-VIN branch rather than a flat tree. It maps without strain, which
- * is the point — the vocabulary in the brief's section 41 is a convention, not
- * a schema.
- *
- * It also demonstrates something the AV adapters mostly hide: the action's
- * target state and the feedback's target state are different objects
- * (`commands.lock` is written, `doors.locked` is read). The model carries a
- * binding per action and per feedback rather than one per capability for this
- * reason.
- */
-export const vehicle: Resource = {
-    id: "car.omoda",
-    type: "vehicle",
-    owner: "omoda.0",
-    capabilities: [
-        {
-            id: "charging",
-            actions: [],
-            feedback: [
-                { id: "soc", binding: { state: "omoda.0.TESTVIN0000000001.battery.soc" }, presentation: "number" },
-                { id: "plugged", binding: { state: "omoda.0.TESTVIN0000000001.charging.plugConnected" }, presentation: "boolean" },
-                { id: "range", binding: { state: "omoda.0.TESTVIN0000000001.battery.rangeElectric" }, presentation: "number" },
-            ],
-        },
-        {
-            id: "lock",
-            actions: [{ kind: "set", id: "lock", binding: { state: "omoda.0.TESTVIN0000000001.commands.lock" }, value: true }],
-            feedback: [{ id: "locked", binding: { state: "omoda.0.TESTVIN0000000001.doors.locked" }, presentation: "boolean" }],
-        },
-    ],
-};
-
 export const allMapped: ReadonlyArray<Resource> = [
     iiyamaLobby,
     atlonaSwitcher,
@@ -342,7 +319,6 @@ export const allMapped: ReadonlyArray<Resource> = [
     atemProgram,
     atemRecording,
     skyBox,
-    vehicle,
 ];
 
 export const allCollections: ReadonlyArray<ResourceCollection> = [acmTransmitters, atemInputs];
