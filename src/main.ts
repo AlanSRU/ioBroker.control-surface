@@ -27,6 +27,7 @@ import { run } from "./engine/sequence";
 /** Debounce for republishing after a burst of foreign state changes. */
 const REPUBLISH_MS = 50;
 
+/** The adapter: `ObjectSource` and `Effects` over ioBroker, and nothing more. */
 class ControlSurface extends utils.Adapter {
     private registry = Registry.load([], []).registry;
     private scenes = SceneBook.load([], this.registry).book;
@@ -42,6 +43,9 @@ class ControlSurface extends utils.Adapter {
 
     private republishTimer: ioBroker.Timeout | undefined;
 
+    /**
+     * @param options - Adapter options supplied by js-controller
+     */
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: "control-surface" });
         this.on("ready", this.onReady.bind(this));
@@ -49,6 +53,7 @@ class ControlSurface extends utils.Adapter {
         this.on("unload", this.onUnload.bind(this));
     }
 
+    /** Loads the declarations, publishes the tree, then subscribes. */
     private async onReady(): Promise<void> {
         await this.setState("info.connection", { val: false, ack: true });
 
@@ -159,20 +164,55 @@ class ControlSurface extends utils.Adapter {
     /**
      * Reads a collection's members and the states they contribute.
      *
-     * `*` in an ioBroker pattern matches dots too, so `transmitters.*` also
-     * matches `transmitters.007.name`. Members are the objects exactly one
-     * level below the pattern's fixed prefix; anything deeper is a member's
-     * own state, not another member.
+     * Two things about ioBroker patterns had to be learned against real
+     * hardware, and both produced an empty collection that looked like a
+     * working one.
+     *
+     * **`getForeignObjects` cannot match a wildcard inside a segment.**
+     * `blackmagic-atem.0.inputs.input*` returns nothing at all — with a type
+     * filter, without one, either way. Only whole-segment patterns work. So the
+     * query asks for the parent level and the pattern is applied here.
+     *
+     * **`*` otherwise matches dots**, so `transmitters.*` also matches
+     * `transmitters.007.name`. A member is one level below the parent, and
+     * anything deeper is a member's own state — hence `[^.]*` and the depth
+     * check rather than a loose prefix match.
      *
      * @param collection - The collection to read
      */
     private async primeCollection(collection: ResourceCollection): Promise<void> {
-        const prefix = collection.members.slice(0, collection.members.indexOf("*"));
-        const depth = prefix.replace(/\.$/, "").split(".").length;
+        const pattern = collection.members;
+        const depth = pattern.split(".").length;
+        const parent = pattern.slice(0, pattern.lastIndexOf("."));
 
-        const objects = await this.getForeignObjectsAsync(collection.members, null);
-        const ids = Object.keys(objects ?? {}).filter(id => id.split(".").length === depth + 1);
+        const matches = new RegExp(
+            `^${pattern
+                .split("*")
+                .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+                .join("[^.]*")}$`,
+        );
+
+        // Each type is asked for separately, because `getForeignObjects` with no
+        // type returns **states only**. Against the real ATEM that quietly
+        // returned the 76 leaf states under `inputs.*` and none of the 19 input
+        // channels, so the collection came back empty while looking like a
+        // working query. A member is whatever the owning adapter made it.
+        const found = new Set<string>();
+        for (const type of ["channel", "device", "folder", "state"] as const) {
+            const objects = await this.getForeignObjectsAsync(`${parent}.*`, type);
+            for (const id of Object.keys(objects ?? {})) {
+                found.add(id);
+            }
+        }
+        const ids = [...found].filter(id => id.split(".").length === depth && matches.test(id));
         this.members.set(collection.members, ids.sort());
+        // Info rather than debug: an operator needs to know whether their ATEM
+        // inputs were found, and a silent empty collection looks identical to a
+        // working one until a selector turns up with no options in it.
+        this.log[ids.length > 0 ? "info" : "warn"](
+            `Collection "${collection.id}": ${ids.length} members match ${collection.members} ` +
+                `(${found.size} objects under ${parent}.*)`,
+        );
 
         for (const id of ids) {
             for (const suffix of [collection.valueState, collection.nameState]) {
@@ -251,6 +291,12 @@ class ControlSurface extends utils.Adapter {
         await this.setState(state.id, { val: state.val, ack: true, q: state.q });
     }
 
+    /**
+     * Routes a change to the action engine, or into the object-tree cache.
+     *
+     * @param id - State that changed
+     * @param state - Its new value, or null when it was deleted
+     */
     private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
         if (!state) {
             return;
@@ -351,6 +397,9 @@ class ControlSurface extends utils.Adapter {
         );
     }
 
+    /**
+     * @param callback - Called once timers are cleared
+     */
     private onUnload(callback: () => void): void {
         try {
             if (this.republishTimer) {

@@ -219,6 +219,36 @@ already coerced them correctly. The general lesson is that this trap is not a
 one-off: anywhere a device value meets a type decision, the declared type
 decides. Both entrances now have a test named after the device.
 
+### Run against real hardware, 2026-09-11
+
+A Samsung UE43DU7100KXXU and a Blackmagic ATEM, through a `dev-server` instance.
+Three things are worth recording.
+
+**Every state id in the mapping existed.** Including the ATEM corrections made
+while implementing `valueState` — `inputs.input<N>` with `inputId` — which had
+been written from source and never run. `me0.programInput`, `me0.inTransition`
+and the whole `recording.*` group were all present on the live device.
+
+**The engine needed no change; the adapter needed three.** All three were
+object-query bugs: a wildcard inside a segment matches nothing, a typeless
+`getForeignObjects` returns states only, and `*` otherwise matches dots. The
+split held exactly as designed — the tested half was right and the untested
+half was wrong.
+
+**Two decisions taken blind were validated.** `samsung_tizen` publishes no
+`info.connection` at all, so the "absent means unknown, not offline" rule is
+what stops every one of its resources reading unhealthy. And the ATEM logged
+*"Rebuilding state structure based on detected device capabilities"* on connect,
+which is the capability-dependent tree the model was built to tolerate.
+
+The Samsung also added a case the survey had not seen: `KEY_POWERON` and
+`KEY_POWEROFF` are not keys at all. The adapter reads the current power state
+and then sends Wake-on-LAN or the *toggle*, so the read-then-act dance
+`iobroker-react` performs by hand is already done one layer down. Its only
+readable state, `info.available`, is `role: "indicator.reachable"` filled from a
+TCP port check — a proxy for power, not a report of it. **The model cannot say
+that a reading is inferred rather than reported**, and that is a real gap.
+
 ### Some things genuinely do not generalise, and that is fine
 
 The Blustream MFP microphone mixer exposes `autoBg`, `bgDelay`, `rampUp`,
@@ -573,6 +603,10 @@ already has schedules, scripts and Blockly for it.
   `connected` stays true — and that is a *heartbeat* problem, not a value-age
   one. Closing it properly wants something like TouchBroker's per-binding health
   source rather than a timeout on every reading.
+- **Nothing can mark a reading as inferred rather than reported.** The Samsung
+  TV's `info.available` is a TCP port check standing in for power. A panel
+  showing it cannot tell the operator that the TV is *probably* on, and a scene
+  cannot prefer a real report over a proxy where both exist.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's

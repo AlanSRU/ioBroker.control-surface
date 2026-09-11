@@ -13,6 +13,7 @@
  *   iobroker.blustream-mfp    main.js            v0.5.3
  *   iobroker.blackmagic-atem  src/main.ts        v0.2.9
  *   iobroker.streamdeck       src/lib/streamdeck-types.ts  v0.5.0 (b8a3b0b)
+ *   iobroker.samsung_tizen    main.js            v1.2.0
  */
 
 import type { Resource, ResourceCollection } from "./model";
@@ -630,6 +631,75 @@ export const receptionPanel: Resource = {
     ],
 };
 
+// ---------------------------------------------------------------------------
+// Samsung Tizen TV — verified against real hardware, and the first to be
+// ---------------------------------------------------------------------------
+
+/**
+ * A Samsung UE43DU7100KXXU, mapped and then run against the actual set.
+ *
+ * Three things here are worth more than the mapping itself.
+ *
+ * **Absolute power exists, but the adapter synthesises it.** `KEY_POWERON` and
+ * `KEY_POWEROFF` are not keys the TV has: `onoff()` in the adapter reads the
+ * current power state and then either does nothing, sends Wake-on-LAN, or sends
+ * the *toggle* `KEY_POWER`. So the read-then-act dance `iobroker-react` performs
+ * by hand in `tvSetPower()` is already done one layer down, and this model gets
+ * idempotent power for free — as two `set` actions, not a `toggle`.
+ *
+ * **Every control is a momentary button**, `role: "button"`, boolean, with no
+ * readable value. `KEY_POWER` is therefore a `set` of `true`, exactly like a
+ * sky-remote button, and *not* the `toggle` kind — there is nothing to invert.
+ *
+ * **The only readable state is a proxy.** `info.available` is
+ * `role: "indicator.reachable"`, and the adapter fills it from a TCP port check
+ * that it also uses as its power answer. It is not the TV reporting its power;
+ * it is the network answering for it. The model has no way to say a reading is
+ * inferred rather than reported, which is a real gap and is recorded as one.
+ */
+export const samsungTv: Resource = {
+    id: "display.meeting",
+    type: "display",
+    name: "Meeting Room TV",
+    owner: "samsung_tizen.0",
+    capabilities: [
+        {
+            id: "power",
+            actions: [
+                { kind: "set", id: "on", binding: { state: "samsung_tizen.0.control.KEY_POWERON" }, value: true },
+                { kind: "set", id: "off", binding: { state: "samsung_tizen.0.control.KEY_POWEROFF" }, value: true },
+                { kind: "set", id: "toggle", binding: { state: "samsung_tizen.0.control.KEY_POWER" }, value: true },
+            ],
+            // Named `reachable`, not `power`, because that is what it measures.
+            feedback: [
+                { id: "reachable", binding: { state: "samsung_tizen.0.info.available" }, presentation: "boolean" },
+            ],
+        },
+        {
+            id: "source",
+            // A display choosing its own input is a one-output matrix, so these
+            // are `route` — but each input is its own button rather than a value
+            // written to one state, which no other mapped device does.
+            actions: [
+                { kind: "route", id: "hdmi1", binding: { state: "samsung_tizen.0.control.KEY_HDMI1" }, layer: "all" },
+                { kind: "route", id: "hdmi2", binding: { state: "samsung_tizen.0.control.KEY_HDMI2" }, layer: "all" },
+                { kind: "route", id: "hdmi3", binding: { state: "samsung_tizen.0.control.KEY_HDMI3" }, layer: "all" },
+                { kind: "route", id: "hdmi4", binding: { state: "samsung_tizen.0.control.KEY_HDMI4" }, layer: "all" },
+            ],
+            feedback: [],
+        },
+        {
+            id: "volume",
+            actions: [
+                { kind: "set", id: "up", binding: { state: "samsung_tizen.0.control.KEY_VOLUP" }, value: true },
+                { kind: "set", id: "down", binding: { state: "samsung_tizen.0.control.KEY_VOLDOWN" }, value: true },
+                { kind: "set", id: "mute", binding: { state: "samsung_tizen.0.control.KEY_MUTE" }, value: true },
+            ],
+            feedback: [],
+        },
+    ],
+};
+
 export const allMapped: ReadonlyArray<Resource> = [
     iiyamaLobby,
     atlonaSwitcher,
@@ -641,6 +711,7 @@ export const allMapped: ReadonlyArray<Resource> = [
     atemRecording,
     skyBox,
     receptionPanel,
+    samsungTv,
 ];
 
 export const allCollections: ReadonlyArray<ResourceCollection> = [acmTransmitters, atemInputs];
