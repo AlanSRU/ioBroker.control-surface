@@ -341,9 +341,28 @@ accepted and go nowhere — and reached the same proposed shape, a binding-level
 strongest argument yet that it is real and worth a model change rather than a
 workaround.
 
-Not built here. The honest interim is that a scene waiting on a state its own
-previous step just wrote is waiting on itself, and a `delay` before the
-`waitFor` is the crude fix.
+**Built as `settleMs`, and it does not claim to detect echoes.** Since the two
+are byte-identical at the instant they arrive, the model takes the weaker
+observable thing instead: a reading counts as confirmation only once it has held
+its value for a declared period. A wrong echo gets corrected and the clock
+resets; a true state holds. `samsungtv`'s `state.power` declares 8000ms, because
+`setPower` schedules a re-poll four seconds later and that correction needs time
+to land and be seen.
+
+It sits on the `FeedbackDef` rather than on the step. Which adapters acknowledge
+their own intent is a property of the binding, so it is recorded once and every
+scene gets it without asking — the alternative is every scene author discovering
+it separately, which is how the first one went.
+
+The static half comes free: a `waitFor` whose timeout is shorter than the
+feedback's settling window can never confirm anything, so it is rejected at load
+with both numbers named.
+
+Verified on the bench end to end. With the TV starting in standby the scene put
+it to sleep, woke it, and switched the mixer only after `state.power` had held
+`true` for its window — the set was genuinely on eight seconds before the scene
+moved on. The failure direction is covered by test rather than by hardware,
+since making the wake fail on demand is not something the bench can do.
 
 ### Health and trustworthiness turned out to be different questions
 
@@ -728,10 +747,10 @@ already has schedules, scripts and Blockly for it.
   `connected` stays true — and that is a *heartbeat* problem, not a value-age
   one. Closing it properly wants something like TouchBroker's per-binding health
   source rather than a timeout on every reading.
-- **Write confirmation.** See the optimistic-ack finding above: nothing
-  distinguishes a device report from an adapter echoing its own intent.
-  TouchBroker wants the same thing and proposes `confirmWithinMs`. Whatever is
-  built should be designed against both cases at once.
+- **The other half of write confirmation.** `settleMs` answers "has the device
+  settled on this", which covers an optimistic ack. TouchBroker's case is the
+  mirror — a write that is accepted and goes nowhere, with *no* echo at all —
+  and wants `confirmWithinMs` on the binding. Nothing here covers that yet.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's

@@ -270,3 +270,24 @@ it("requireReported on a genuine device report is fine", () => {
     );
     assert.deepEqual(problems, []);
 });
+
+it("a timeout shorter than the settling window is refused at load", () => {
+    // The value must hold for settleMs before it counts, so a timeout that
+    // expires first can never confirm anything.
+    const reasons = reasonsFor([
+        sceneOf("bad", {
+            steps: [
+                {
+                    kind: "waitFor",
+                    resource: "display.meeting",
+                    capability: "power",
+                    feedback: "power",
+                    equals: true,
+                    timeoutMs: 5000,
+                    requireReported: true,
+                },
+            ],
+        }),
+    ]);
+    assert.match(reasons[0]!, /times out after 5000ms but "power" needs 8000ms to settle/);
+});

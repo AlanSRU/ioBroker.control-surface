@@ -671,9 +671,25 @@ export const samsungTvModern: Resource = {
                 { kind: "set", id: "off", binding: { state: "samsungtv.0.meetingtv.control.power" }, value: false },
                 { kind: "set", id: "wake", binding: { state: "samsungtv.0.meetingtv.control.wol" }, value: true },
             ],
-            // A real report, so a scene may demand it with `requireReported`.
+            /*
+             * A real report rather than a proxy, so a scene may demand it with
+             * `requireReported` — but not an *immediate* one. The adapter writes
+             * this state to the requested value the moment a command is handled,
+             * acknowledged: measured two seconds after a write it read `false`
+             * while the TV was still on, and after an external wake it read
+             * `true` for about twenty-four seconds while the set sat in standby.
+             *
+             * `setPower` schedules a re-poll 4s later (6s on some paths), so 8s
+             * gives the correction time to land and be seen. Without it a scene
+             * waiting on this state is waiting on its own previous step.
+             */
             feedback: [
-                { id: "power", binding: { state: "samsungtv.0.meetingtv.state.power" }, presentation: "boolean" },
+                {
+                    id: "power",
+                    binding: { state: "samsungtv.0.meetingtv.state.power" },
+                    presentation: "boolean",
+                    settleMs: 8000,
+                },
             ],
         },
         {
@@ -703,7 +719,13 @@ export const samsungTvModern: Resource = {
         {
             id: "volume",
             actions: [
-                { kind: "level", id: "set", binding: { state: "samsungtv.0.meetingtv.control.volume" }, min: 0, max: 100 },
+                {
+                    kind: "level",
+                    id: "set",
+                    binding: { state: "samsungtv.0.meetingtv.control.volume" },
+                    min: 0,
+                    max: 100,
+                },
                 { kind: "toggle", id: "mute", binding: { state: "samsungtv.0.meetingtv.control.muted" } },
             ],
             feedback: [

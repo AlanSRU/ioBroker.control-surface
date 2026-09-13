@@ -143,6 +143,15 @@ function stepProblems(
                     // step would time out before reading anything at all.
                     faults.push(`${at} has a timeout of ${step.timeoutMs}ms`);
                 }
+                const settleMs = feedback?.settleMs ?? 0;
+                if (settleMs > 0 && step.timeoutMs <= settleMs) {
+                    // The value has to hold for `settleMs` before it counts, so
+                    // a timeout that expires first can never confirm anything.
+                    faults.push(
+                        `${at} times out after ${step.timeoutMs}ms but ` +
+                            `"${step.feedback}" needs ${settleMs}ms to settle`,
+                    );
+                }
                 break;
             }
 

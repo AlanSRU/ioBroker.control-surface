@@ -212,6 +212,23 @@ export interface FeedbackDef {
      * confirmed. Health and trustworthiness are different questions.
      */
     readonly inferred?: boolean;
+    /**
+     * How long this reading must hold a value before it counts as confirmation.
+     *
+     * For adapters that acknowledge their own intent. `iobroker.samsungtv`
+     * writes `state.power` to the *requested* value the moment a command is
+     * handled — measured two seconds after a write, it read `false` while the
+     * TV was still on — and lets a later poll correct it. An optimistic echo
+     * and a genuine report are byte-identical, so nothing can tell them apart
+     * at the instant they arrive. What *is* observable is whether the value
+     * survives: a wrong echo gets corrected, a true state holds.
+     *
+     * So this is not a claim to detect echoes. It is the honest weaker thing —
+     * wait until the answer stops changing. `waitFor` applies it without the
+     * scene asking, because which adapters do this is a property of the
+     * binding and should be recorded once rather than in every scene.
+     */
+    readonly settleMs?: number;
 }
 
 /** An observed value. Runtime, not model. */

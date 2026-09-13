@@ -274,6 +274,11 @@ async function attemptStep(
  * scene that carried on from one would be acting on an assumption at the exact
  * moment it asked not to.
  *
+ * Honours the feedback's `settleMs`, so a value the owning adapter wrote
+ * optimistically and a poll later corrects will not satisfy the step. Nothing
+ * here detects an echo — that is not possible — it waits for the answer to stop
+ * changing, which is the observable weaker thing.
+ *
  * Matches the semantic name *or* the device's own value, because `toDevice`
  * already accepts either when a step writes one. Without that, a scene that
  * routes by `1` has to wait on `"Camera 1"`, and the first real scene written
@@ -291,15 +296,27 @@ async function waitFor(
     effects: Effects,
 ): Promise<FailureReason | undefined> {
     const wanted = String(step.equals);
+    const settleMs = registry.getFeedback(step.resource, step.capability, step.feedback)?.settleMs ?? 0;
     let waited = 0;
     let last: StateValue | null = null;
+    let matchedAt: number | undefined;
 
     for (;;) {
         const reading = read(step.resource, step.capability, step.feedback, registry, effects.source());
         last = reading?.value ?? null;
         const matched = reading !== undefined && (String(reading.value) === wanted || String(reading.raw) === wanted);
+
         if (reading?.healthy && matched) {
-            return undefined;
+            // The clock starts at the first match, not at the step, so a value
+            // arriving late still gets its full settling window.
+            matchedAt ??= waited;
+            if (waited - matchedAt >= settleMs) {
+                return undefined;
+            }
+        } else {
+            // Changed away, so what we saw was not the answer. An optimistic
+            // echo that a poll corrects lands here, which is the whole point.
+            matchedAt = undefined;
         }
         if (waited >= step.timeoutMs) {
             return { kind: "timeout", waited, last };

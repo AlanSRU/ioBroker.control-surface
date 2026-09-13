@@ -457,3 +457,90 @@ it("waitFor accepts the device value as well as the semantic name", () => {
         assert.equal(byValue.completed, true, "the device value should match too");
     });
 });
+
+it("an optimistic value that gets corrected does not satisfy a settling wait", async () => {
+    // The samsungtv case: the adapter acks the requested value immediately, then
+    // a poll corrects it because the TV never did it. The wait must not be
+    // fooled by the echo.
+    const tree = new FakeTree({ values: { ...connected, "samsungtv.0.meetingtv.info.online": true } });
+    tree.set("samsungtv.0.meetingtv.state.power", true); // the optimistic echo
+    const effects = recorderOn(tree);
+    // 4 seconds in, the poll reports the truth: the TV is still off.
+    effects.at(4000, () => tree.set("samsungtv.0.meetingtv.state.power", false));
+
+    const book = bookOf([
+        {
+            id: "s",
+            name: "s",
+            steps: [
+                {
+                    kind: "waitFor",
+                    resource: "display.meeting",
+                    capability: "power",
+                    feedback: "power",
+                    equals: true,
+                    timeoutMs: 30_000,
+                },
+            ],
+        },
+    ]);
+
+    const report = await run("s", book, registry, effects);
+    assert.equal(report.completed, false, "the corrected echo must not confirm");
+    assert.equal(report.failures[0]!.reason.kind, "timeout");
+});
+
+it("a value that holds satisfies the wait once it has settled", async () => {
+    const tree = new FakeTree({ values: { ...connected, "samsungtv.0.meetingtv.info.online": true } });
+    tree.set("samsungtv.0.meetingtv.state.power", true);
+    const effects = recorderOn(tree);
+
+    const book = bookOf([
+        {
+            id: "s",
+            name: "s",
+            steps: [
+                {
+                    kind: "waitFor",
+                    resource: "display.meeting",
+                    capability: "power",
+                    feedback: "power",
+                    equals: true,
+                    timeoutMs: 30_000,
+                },
+            ],
+        },
+    ]);
+
+    const report = await run("s", book, registry, effects);
+    assert.equal(report.completed, true);
+    // It waited out the declared settling window rather than returning at once.
+    assert.ok(effects.elapsed >= 8000, `settled after only ${effects.elapsed}ms`);
+});
+
+it("a feedback with no settleMs still returns as soon as it matches", async () => {
+    const tree = new FakeTree({ values: connected });
+    const effects = recorderOn(tree);
+    effects.at(150, () => tree.set("blackmagic-atem.0.me0.programInput", 1));
+
+    const book = bookOf([
+        {
+            id: "s",
+            name: "s",
+            steps: [
+                {
+                    kind: "waitFor",
+                    resource: "atem.me1.program",
+                    capability: "source",
+                    feedback: "source",
+                    equals: 1,
+                    timeoutMs: 5000,
+                },
+            ],
+        },
+    ]);
+
+    const report = await run("s", book, registry, effects);
+    assert.equal(report.completed, true);
+    assert.ok(effects.elapsed < 1000, `took ${effects.elapsed}ms`);
+});
