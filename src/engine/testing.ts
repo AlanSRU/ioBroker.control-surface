@@ -22,6 +22,8 @@ export interface TreeSpec {
     readonly values?: Record<StateId, StateValue>;
     /** Full snapshots, for cases that turn on `ack` or `ts`. */
     readonly states?: Record<StateId, StateSnapshot>;
+    /** States whose last write was never echoed back. */
+    readonly unconfirmed?: ReadonlyArray<StateId>;
 }
 
 /** A timestamp standing for "the device reported this just now". */
@@ -45,6 +47,7 @@ export function treeOf(spec: TreeSpec): ObjectSource {
             const value = spec.values?.[id];
             return value === undefined ? undefined : { val: value, ack: true, ts: NOW };
         },
+        unconfirmed: id => (spec.unconfirmed ?? []).includes(id),
     };
 }
 
@@ -59,6 +62,7 @@ export function treeOf(spec: TreeSpec): ObjectSource {
  * between steps — which a literal cannot do.
  */
 export class FakeTree {
+    private readonly unconfirmedStates = new Set<StateId>();
     private readonly spec: {
         meta: Record<StateId, StateMeta>;
         members: Record<string, ReadonlyArray<StateId>>;
@@ -98,7 +102,13 @@ export class FakeTree {
             metaOf: id => this.spec.meta[id],
             membersOf: pattern => this.spec.members[pattern],
             snapshotOf: id => this.spec.states[id],
+            unconfirmed: id => this.unconfirmedStates.has(id),
         };
+    }
+
+    /** Marks a state as written-but-never-echoed. */
+    markUnconfirmed(id: StateId): void {
+        this.unconfirmedStates.add(id);
     }
 }
 

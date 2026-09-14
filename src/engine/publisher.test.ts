@@ -335,3 +335,20 @@ it("an inferred reading says so in its description", () => {
     const reported = objectAt(`${ROOT}.display.lobby.power.power`).common;
     assert.equal(reported.desc, undefined);
 });
+
+it("an unconfirmed write marks the control itself, not just its feedback", () => {
+    // The failure is a control that looks live and does nothing. For a momentary
+    // trigger there is no feedback at all, so the action state is the only thing
+    // a panel can look at.
+    const tree = treeOf({
+        values: { "sky-remote.0.buttons.up": true },
+        unconfirmed: ["sky-remote.0.buttons.up"],
+    });
+    const states = statesFor(registry, tree);
+
+    const button = states.find(s => s.id === `${ROOT}.lounge.skybox.navigation.up`);
+    assert.equal(button?.q, 0x41, "general device problem");
+
+    const healthy = states.find(s => s.id === `${ROOT}.lounge.skybox.healthy`);
+    assert.equal(healthy?.val, false, "the resource should not read healthy");
+});

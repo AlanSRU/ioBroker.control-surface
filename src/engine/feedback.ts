@@ -106,7 +106,7 @@ function readDef(
 
     const raw = snapshot.val;
     const value = semanticValue(def, raw, registry, source);
-    const reason = unhealthyReason(resource, snapshot, registry, source);
+    const reason = unhealthyReason(resource, { ...snapshot, state: def.binding.state }, registry, source);
 
     // Deliberately not folded into `healthy`. A port check that really did
     // succeed is a healthy reading of the wrong thing, and a renderer that
@@ -133,7 +133,7 @@ function readDef(
  */
 function unhealthyReason(
     resource: ResourceId,
-    snapshot: { readonly val: StateValue | null; readonly ack: boolean },
+    snapshot: { readonly val: StateValue | null; readonly ack: boolean; readonly state: string },
     registry: Registry,
     source: ObjectSource,
 ): UnhealthyReason | undefined {
@@ -145,6 +145,12 @@ function unhealthyReason(
         if (reported?.val === false) {
             return "owner-offline";
         }
+    }
+
+    // Ahead of the per-state reasons because it is the actionable one: the
+    // adapter is up, the state exists, and the write still went nowhere.
+    if (source.unconfirmed(snapshot.state)) {
+        return "unconfirmed";
     }
 
     if (snapshot.val === null) {

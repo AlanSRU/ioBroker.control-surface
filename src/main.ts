@@ -20,9 +20,19 @@ import type { ObjectSource, StateMeta, StateSnapshot } from "./engine/resolver";
 import type { StateWrite } from "./engine/actions";
 import { plan } from "./engine/actions";
 import type { ActionTarget, PublishedState, SceneStatus } from "./engine/publisher";
-import { objectsFor, ROOT, SCENES, sceneObjectsFor, sceneTargets, statesFor, writeTargets } from "./engine/publisher";
+import {
+    confirmWindows,
+    objectsFor,
+    ROOT,
+    SCENES,
+    sceneObjectsFor,
+    sceneTargets,
+    statesFor,
+    writeTargets,
+} from "./engine/publisher";
 import type { Effects } from "./engine/sequence";
 import { run } from "./engine/sequence";
+import { WriteLog } from "./engine/writes";
 
 /** Debounce for republishing after a burst of foreign state changes. */
 const REPUBLISH_MS = 50;
@@ -33,6 +43,7 @@ class ControlSurface extends utils.Adapter {
     private scenes = SceneBook.load([], this.registry).book;
     private targets: ReadonlyMap<string, ActionTarget> = new Map();
     private sceneRuns: ReadonlyMap<string, string> = new Map();
+    private writeWindows: ReadonlyMap<string, number> = new Map();
 
     /** Scenes currently running, so a double press cannot interleave two. */
     private readonly running = new Set<string>();
@@ -44,6 +55,11 @@ class ControlSurface extends utils.Adapter {
     private readonly states = new Map<string, StateSnapshot>();
     private readonly meta = new Map<string, StateMeta>();
     private readonly members = new Map<string, ReadonlyArray<string>>();
+
+    /** Writes still waiting for an acknowledged echo. */
+    private readonly writes = new WriteLog();
+
+    private confirmTimer: ioBroker.Timeout | undefined;
 
     private republishTimer: ioBroker.Timeout | undefined;
 
@@ -78,6 +94,7 @@ class ControlSurface extends utils.Adapter {
 
         this.targets = writeTargets(this.registry);
         this.sceneRuns = sceneTargets(this.scenes.all());
+        this.writeWindows = confirmWindows(this.registry);
         this.log.info(
             `${this.registry.allResources().length} resources, ${this.scenes.all().length} scenes, ` +
                 `${this.registry.observedStates().size} states observed`,
@@ -244,6 +261,7 @@ class ControlSurface extends utils.Adapter {
             metaOf: id => this.meta.get(id),
             membersOf: pattern => this.members.get(pattern),
             snapshotOf: id => this.states.get(id),
+            unconfirmed: id => this.writes.unconfirmed(id, Date.now()),
         };
     }
 
@@ -368,6 +386,10 @@ class ControlSurface extends utils.Adapter {
         }
 
         this.states.set(id, { val: state.val, ack: state.ack, ts: state.ts });
+        // Only an acknowledged change answers a pending write. An unacknowledged
+        // one is another command — quite possibly our own arriving back through
+        // the subscription — and would let every write confirm itself.
+        this.writes.observed(id, state.ack);
         this.scheduleRepublish();
     }
 
@@ -419,8 +441,45 @@ class ControlSurface extends utils.Adapter {
                 this.log.error(`Refusing to write undeclared state ${write.state}`);
                 continue;
             }
+            // Armed *before* the write, not after. A quick adapter acknowledges
+            // and the echo arrives through the subscription while
+            // `setForeignStateAsync` is still being awaited — arming afterwards
+            // then records a pending write that has already been answered and
+            // can never be cleared. Every write looked dropped on real hardware
+            // until this was the other way round.
+            const withinMs = this.writeWindows.get(write.state);
+            if (withinMs !== undefined) {
+                this.writes.arm(write.state, Date.now(), withinMs);
+                this.scheduleConfirmCheck(withinMs);
+            }
+
             await this.setForeignStateAsync(write.state, { val: write.value, ack: write.ack });
         }
+    }
+
+    /**
+     * Re-examines pending writes once their window has passed.
+     *
+     * Needed because a write that is never echoed produces no state change, so
+     * nothing else would ever wake the adapter to notice — which is precisely
+     * the failure being detected.
+     *
+     * @param withinMs - The window that was just armed
+     */
+    private scheduleConfirmCheck(withinMs: number): void {
+        if (this.confirmTimer) {
+            this.clearTimeout(this.confirmTimer);
+        }
+        this.confirmTimer = this.setTimeout(() => {
+            this.confirmTimer = undefined;
+            const lapsed = this.writes.lapsed(Date.now());
+            for (const state of lapsed) {
+                this.log.warn(`Write to ${state} was accepted but never echoed back`);
+            }
+            if (lapsed.length > 0) {
+                void this.publish();
+            }
+        }, withinMs + 100);
     }
 
     /**
@@ -478,6 +537,11 @@ class ControlSurface extends utils.Adapter {
                 this.clearTimeout(this.republishTimer);
                 this.republishTimer = undefined;
             }
+            if (this.confirmTimer) {
+                this.clearTimeout(this.confirmTimer);
+                this.confirmTimer = undefined;
+            }
+            this.writes.clear();
             callback();
         } catch {
             callback();

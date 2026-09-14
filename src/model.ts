@@ -42,6 +42,26 @@ export type ValueSpace =
 export interface StateBinding {
     readonly state: StateId;
     readonly values?: ValueSpace;
+    /**
+     * How long an acknowledged echo may take after this state is written.
+     *
+     * Answers the question health cannot: *did my write land*. TouchBroker
+     * recorded the case — a fader bound to a DMX channel, where showcontrol's
+     * Art-Net output is pinned to the wrong interface, so the writes are
+     * accepted, the packets leave the host and nothing receives them. The
+     * adapter is connected, the state is resolved, every existing signal says
+     * the control is fine, and it does nothing.
+     *
+     * What is observable is the echo: a write that reaches the wire comes back
+     * as an acknowledged write to the same state, so its *absence* within a beat
+     * means the write was dropped. Declared per binding because the beat is a
+     * property of the device, and only meaningful on a state that is readable —
+     * a write-only trigger has no echo to wait for by construction.
+     *
+     * This is the mirror of `FeedbackDef.settleMs`: that one distrusts an echo
+     * that comes too readily, this one distrusts an echo that never comes.
+     */
+    readonly confirmWithinMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +297,9 @@ export type UnhealthyReason =
     /** The value is an unconfirmed command, not the device reporting. */
     | "unacknowledged"
     /** The owning adapter's `info.connection` is false. */
-    | "owner-offline";
+    | "owner-offline"
+    /** A write to this state was accepted and never echoed back. */
+    | "unconfirmed";
 
 // ---------------------------------------------------------------------------
 // Scenes and sequences

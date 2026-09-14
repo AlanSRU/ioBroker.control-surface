@@ -47,6 +47,8 @@ const QUALITY = {
     generalInstanceProblem: 0x11,
     /** The owning adapter reports itself disconnected. */
     instanceNotConnected: 0x12,
+    /** Written, accepted, never echoed: the device is not doing as it is told. */
+    generalDeviceProblem: 0x41,
     substituteInitialValue: 0x20,
     substituteDeviceInstanceValue: 0x40,
 } as const;
@@ -80,7 +82,7 @@ export interface PublishedState {
 }
 
 /** The subset of `STATE_QUALITY` this layer emits, as literals so it type-checks. */
-export type Quality = 0x00 | 0x11 | 0x12 | 0x20 | 0x40;
+export type Quality = 0x00 | 0x11 | 0x12 | 0x20 | 0x40 | 0x41;
 
 /** What a write to a published state invokes. */
 export interface ActionTarget {
@@ -196,11 +198,23 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
                 // An action state carries whatever its bound state currently
                 // holds, which for a write-only trigger is nothing.
                 const snapshot = source.snapshotOf(action.binding.state);
+
+                // The unconfirmed check belongs here and not only on feedback:
+                // the failure being detected is a *control* that looks live and
+                // does nothing, and for a momentary trigger the action state is
+                // the only thing a panel has to look at.
+                const unconfirmed = source.unconfirmed(action.binding.state);
+                allHealthy &&= !unconfirmed;
+
                 states.push({
                     id: `${base}.${capability.id}.${action.id}`,
                     val: snapshot?.val ?? null,
                     ack: true,
-                    q: snapshot ? QUALITY.good : QUALITY.generalInstanceProblem,
+                    q: unconfirmed
+                        ? QUALITY.generalDeviceProblem
+                        : snapshot
+                          ? QUALITY.good
+                          : QUALITY.generalInstanceProblem,
                 });
             }
 
@@ -262,6 +276,8 @@ function qualityOf(reason: string | undefined): Quality {
             return QUALITY.good;
         case "owner-offline":
             return QUALITY.instanceNotConnected;
+        case "unconfirmed":
+            return QUALITY.generalDeviceProblem;
         case "never-reported":
             return QUALITY.substituteInitialValue;
         case "unacknowledged":
@@ -501,4 +517,28 @@ export function sceneObjectsFor(scenes: ReadonlyArray<Scene>): ReadonlyArray<Pub
  */
 export function sceneTargets(scenes: ReadonlyArray<Scene>): ReadonlyMap<string, string> {
     return new Map(scenes.map(scene => [`${SCENES}.${scene.id}.run`, scene.id]));
+}
+
+/**
+ * How long each written state may take to echo back.
+ *
+ * Only action bindings appear: confirmation is about writes, and a feedback
+ * binding is never written to.
+ *
+ * @param registry - The declared resources
+ * @returns State id to its confirmation window
+ */
+export function confirmWindows(registry: Registry): ReadonlyMap<string, number> {
+    const windows = new Map<string, number>();
+    for (const resource of registry.allResources()) {
+        for (const capability of resource.capabilities) {
+            for (const action of capability.actions) {
+                const withinMs = action.binding.confirmWithinMs;
+                if (withinMs !== undefined && withinMs > 0) {
+                    windows.set(action.binding.state, withinMs);
+                }
+            }
+        }
+    }
+    return windows;
 }

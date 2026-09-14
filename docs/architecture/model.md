@@ -364,6 +364,39 @@ it to sleep, woke it, and switched the mixer only after `state.power` had held
 moved on. The failure direction is covered by test rather than by hardware,
 since making the wake fail on demand is not something the bench can do.
 
+### `confirmWithinMs`, and the failure it catches that nothing else does
+
+TouchBroker's case, closed. A fader bound to a DMX channel where the Art-Net
+output is pinned to the wrong interface: the writes are accepted, the packets
+leave the host, nothing receives them. The adapter is connected, the state is
+resolved, the value is acknowledged — every signal this model had said the
+control was fine, and it did nothing.
+
+`StateBinding` gains `confirmWithinMs`: how long an acknowledged echo may take
+after the state is written. Its absence is the evidence. Declared per binding
+because the beat is a property of the device, and only meaningful on a readable
+state — a write-only trigger has no echo to wait for by construction.
+
+It is the mirror of `settleMs`. That one distrusts an echo that comes too
+readily; this one distrusts an echo that never comes.
+
+**It marks the control, not only the feedback.** The first cut put the unhealthy
+reason on feedback readings alone, which misses the entire point for a momentary
+trigger: `lounge.skybox.navigation.up` has no feedback, so a panel has nothing
+but the action state to look at. Action states now carry the quality and the
+resource's `healthy` reflects it.
+
+Everything else composes without a new rule. `waitFor` already requires a healthy
+reading, so a scene cannot step past a write that went nowhere even though the
+value it wanted is sitting right there.
+
+**Both directions are verified on hardware**, which `settleMs` could not manage.
+`iobroker.samsungtv`'s `control.wol` acknowledges the state back, but only
+`if (adapter.config.enableWol && device.mac)` — with WoL turned off it returns
+silently. Enabled, the write confirms and quality reads good; disabled, the same
+write lapses to `0x41` with the resource unhealthy and a warning naming the
+state. Two settings of one flag, one real adapter, both paths.
+
 ### Health and trustworthiness turned out to be different questions
 
 `FeedbackDef` gained `inferred`, and it is deliberately *not* folded into
@@ -747,10 +780,6 @@ already has schedules, scripts and Blockly for it.
   `connected` stays true — and that is a *heartbeat* problem, not a value-age
   one. Closing it properly wants something like TouchBroker's per-binding health
   source rather than a timeout on every reading.
-- **The other half of write confirmation.** `settleMs` answers "has the device
-  settled on this", which covers an optimistic ack. TouchBroker's case is the
-  mirror — a write that is accepted and goes nowhere, with *no* echo at all —
-  and wants `confirmWithinMs` on the binding. Nothing here covers that yet.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's

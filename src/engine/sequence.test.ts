@@ -544,3 +544,34 @@ it("a feedback with no settleMs still returns as soon as it matches", async () =
     assert.equal(report.completed, true);
     assert.ok(effects.elapsed < 1000, `took ${effects.elapsed}ms`);
 });
+
+it("waitFor is not satisfied while a write to the same state is unconfirmed", async () => {
+    // Composition rather than a new rule: waitFor already requires a healthy
+    // reading, and an unechoed write makes the reading unhealthy. A scene
+    // therefore cannot step past a write that went nowhere, even though the
+    // value it wanted is sitting right there.
+    const tree = new FakeTree({ values: { ...connected, "blackmagic-atem.0.me0.programInput": 1 } });
+    tree.markUnconfirmed("blackmagic-atem.0.me0.programInput");
+    const effects = recorderOn(tree);
+
+    const book = bookOf([
+        {
+            id: "s",
+            name: "s",
+            steps: [
+                {
+                    kind: "waitFor",
+                    resource: "atem.me1.program",
+                    capability: "source",
+                    feedback: "source",
+                    equals: 1,
+                    timeoutMs: 400,
+                },
+            ],
+        },
+    ]);
+
+    const report = await run("s", book, registry, effects);
+    assert.equal(report.completed, false);
+    assert.deepEqual(report.failures[0]!.reason, { kind: "timeout", waited: 400, last: 1 });
+});

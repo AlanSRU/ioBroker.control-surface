@@ -189,3 +189,25 @@ it("the same TV reads inferred through one adapter and reported through the othe
     // role as the tizen state, and correctly not flagged.
     assert.equal(read("display.meeting", "health", "online", registry, tree)?.inferred, false);
 });
+
+it("a write that was never echoed makes its reading unhealthy", () => {
+    // The adapter is up and the state exists; every other signal says the
+    // control is fine. This is the one that says the write went nowhere.
+    const tree = treeOf({
+        values: { ...owners, "blackmagic-atem.0.me0.programInput": 1 },
+        unconfirmed: ["blackmagic-atem.0.me0.programInput"],
+    });
+    const reading = read("atem.me1.program", "source", "source", registry, tree);
+    assert.equal(reading?.healthy, false);
+    assert.equal(reading?.unhealthy, "unconfirmed");
+    // The value still comes through; it is the trust that is gone.
+    assert.equal(reading?.raw, 1);
+});
+
+it("an offline owner explains an unconfirmed write rather than repeating it", () => {
+    const tree = treeOf({
+        values: { ...owners, "blackmagic-atem.0.info.connection": false, "blackmagic-atem.0.me0.programInput": 1 },
+        unconfirmed: ["blackmagic-atem.0.me0.programInput"],
+    });
+    assert.equal(read("atem.me1.program", "source", "source", registry, tree)?.unhealthy, "owner-offline");
+});

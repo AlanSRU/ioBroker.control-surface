@@ -39,6 +39,14 @@ export interface ObjectSource {
     membersOf(pattern: string): ReadonlyArray<StateId> | undefined;
     /** Current state, or undefined when no such state exists. */
     snapshotOf(state: StateId): StateSnapshot | undefined;
+    /**
+     * Whether a write to this state was accepted and never echoed back.
+     *
+     * Lives here rather than being threaded through every read because it is
+     * part of the same question `snapshotOf` answers: what is true of this state
+     * right now.
+     */
+    unconfirmed(state: StateId): boolean;
 }
 
 /**

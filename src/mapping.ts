@@ -472,6 +472,12 @@ export const atemProgram: Resource = {
                     binding: {
                         state: "blackmagic-atem.0.me0.programInput",
                         values: { kind: "resourceIds", collection: "atem.sources" },
+                        // The mixer echoes a program change back acknowledged
+                        // within a frame or two, so silence here means the write
+                        // did not reach it — the connection dropped between the
+                        // adapter accepting the write and the device seeing it.
+                        // Two seconds is generous for a device on the same LAN.
+                        confirmWithinMs: 2000,
                     },
                     layer: "video",
                 },
@@ -669,7 +675,24 @@ export const samsungTvModern: Resource = {
             actions: [
                 { kind: "set", id: "on", binding: { state: "samsungtv.0.meetingtv.control.power" }, value: true },
                 { kind: "set", id: "off", binding: { state: "samsungtv.0.meetingtv.control.power" }, value: false },
-                { kind: "set", id: "wake", binding: { state: "samsungtv.0.meetingtv.control.wol" }, value: true },
+                {
+                    kind: "set",
+                    id: "wake",
+                    binding: {
+                        state: "samsungtv.0.meetingtv.control.wol",
+                        /*
+                         * TouchBroker's failure mode, in this adapter's own
+                         * source: `case 'wol'` sends the magic packet and
+                         * acknowledges the state back, but only `if
+                         * (adapter.config.enableWol && device.mac)`. With WoL
+                         * turned off it returns silently — the write is
+                         * accepted, nothing happens, and every other signal
+                         * still says the control is fine.
+                         */
+                        confirmWithinMs: 1500,
+                    },
+                    value: true,
+                },
             ],
             /*
              * A real report rather than a proxy, so a scene may demand it with
