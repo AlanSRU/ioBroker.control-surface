@@ -370,6 +370,11 @@ it("the brief's presentation scene runs end to end", async () => {
             "streamdeck.0.info.connection": true,
             "blustream-acm.0.transmitters.007.id": "007",
             "blustream-acm.0.transmitters.007.name": "Laptop",
+            // The panel's page menu lives inside its layout, so the final step
+            // cannot resolve without one.
+            "streamdeck.0.decks.reception.layoutJson": JSON.stringify({
+                pages: [{ id: "presentation", name: "Presentation", mode: "direct", buttons: [] }],
+            }),
         },
         members: { "blustream-acm.0.transmitters.*": ["blustream-acm.0.transmitters.007"] },
     });

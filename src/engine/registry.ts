@@ -69,15 +69,19 @@ export class Registry {
     private readonly resources: ReadonlyMap<ResourceId, Resource>;
     private readonly collections: ReadonlyMap<ResourceId, ResourceCollection>;
     private readonly states: ReadonlySet<StateId>;
+    /** States named by a `jsonList` value space: read for options, never written. */
+    private readonly documents: ReadonlySet<StateId>;
 
     private constructor(
         resources: ReadonlyMap<ResourceId, Resource>,
         collections: ReadonlyMap<ResourceId, ResourceCollection>,
         states: ReadonlySet<StateId>,
+        documents: ReadonlySet<StateId>,
     ) {
         this.resources = resources;
         this.collections = collections;
         this.states = states;
+        this.documents = documents;
     }
 
     /**
@@ -131,18 +135,26 @@ export class Registry {
         }
 
         const states = new Set<StateId>();
+        const documents = new Set<StateId>();
         for (const resource of byId.values()) {
             for (const capability of resource.capabilities) {
-                for (const action of capability.actions) {
-                    states.add(action.binding.state);
-                }
-                for (const feedback of capability.feedback) {
-                    states.add(feedback.binding.state);
+                for (const binding of [
+                    ...capability.actions.map(a => a.binding),
+                    ...capability.feedback.map(f => f.binding),
+                ]) {
+                    states.add(binding.state);
+                    // The document a `jsonList` reads is a *source of options*,
+                    // not a binding. It goes in the observed set, never the
+                    // writable one — the same asymmetry as owner connection
+                    // states, for the same reason.
+                    if (binding.values?.kind === "jsonList") {
+                        documents.add(binding.values.state);
+                    }
                 }
             }
         }
 
-        return { registry: new Registry(byId, collectionsById, states), problems };
+        return { registry: new Registry(byId, collectionsById, states, documents), problems };
     }
 
     getResource(id: ResourceId): Resource | undefined {
@@ -206,17 +218,23 @@ export class Registry {
     }
 
     /**
-     * Every state worth subscribing to: the declared bindings, plus the owner
-     * connection states health is derived from.
+     * Every state worth subscribing to: the declared bindings, the owner
+     * connection states health is derived from, and the JSON documents
+     * `jsonList` value spaces read their options out of.
      *
      * Deliberately wider than `permits()`. Reading the connection flag of an
      * adapter already named as an owner is within the whitelist's purpose;
-     * making it *writable* would not be.
+     * making it *writable* would not be. A deck's `layoutJson` is the same
+     * case — the page menu has to refresh when the layout is re-authored, and
+     * nothing here may ever write a layout back.
      */
     observedStates(): ReadonlySet<StateId> {
         const observed = new Set<StateId>(this.states);
         for (const resource of this.resources.values()) {
             observed.add(`${resource.owner}.info.connection`);
+        }
+        for (const document of this.documents) {
+            observed.add(document);
         }
         return observed;
     }
@@ -334,7 +352,20 @@ function bindingProblems(
         problems.push({ where, reason: `"${what}" binds to "${binding.state}", which is not a full state id` });
     }
 
-    const values = binding.values as { kind?: string; collection?: string; entries?: unknown[] } | undefined;
+    const values = binding.values as
+        { kind?: string; collection?: string; entries?: unknown[]; state?: string } | undefined;
+    if (values?.kind === "jsonList") {
+        // Checked here rather than left to resolve as "no document": a state id
+        // that is missing or semantic can never resolve, so it is a
+        // configuration fault and belongs on the same side of the line as an
+        // unknown collection.
+        if (!values.state || !values.state.includes(".")) {
+            problems.push({
+                where,
+                reason: `"${what}" reads options from "${String(values.state)}", which is not a full state id`,
+            });
+        }
+    }
     if (values?.kind === "resourceIds") {
         if (!values.collection || !collections.has(values.collection)) {
             problems.push({

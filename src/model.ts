@@ -25,10 +25,11 @@ export type StateValue = string | number | boolean;
 /**
  * How the semantic value space maps onto the device's own value space.
  *
- * Three real cases exist across the surveyed adapters and all three are needed:
+ * Four real cases exist across the surveyed adapters and all four are needed:
  * the map is explicit, the map is published by the adapter in `common.states`,
- * or the values are ids that only exist at runtime (Blustream TX ids, ATEM
- * input numbers) and must be resolved from another resource.
+ * the values are ids that only exist at runtime (Blustream TX ids, ATEM input
+ * numbers) and must be resolved from another resource, or the list is not in
+ * the object tree at all but inside a `role: 'json'` state.
  */
 export type ValueSpace =
     | { kind: "identity" }
@@ -37,7 +38,47 @@ export type ValueSpace =
     /** Read `common.states` off the bound object and use it as the table. */
     | { kind: "objectStates" }
     /** Values are the ids of members of another resource collection. */
-    | { kind: "resourceIds"; collection: ResourceId };
+    | { kind: "resourceIds"; collection: ResourceId }
+    /** Values come from a list inside a `role: 'json'` state. */
+    | JsonListSpace;
+
+/**
+ * A value space whose options live inside a JSON document held in one state.
+ *
+ * `ResourceCollection` assumes the members are discoverable from the object
+ * tree by pattern, and for Blustream and the ATEM they are. They are not
+ * always: `iobroker.streamdeck` keeps a deck's entire page list inside
+ * `decks.<id>.layoutJson` as `{ pages: [{ id, name, … }] }`, so the pages a
+ * `currentPageId` will accept appear nowhere as objects. Without this form
+ * `surface.reception`'s `navigation` action could be invoked but never offered
+ * as a menu.
+ *
+ * The three optional fields are the same three questions `ResourceCollection`
+ * answers for the object tree — where the list is, which part of a member is
+ * the value, which part is the label — asked of a document instead.
+ *
+ * The document is usually **not** the bound state: the deck's pages are in
+ * `layoutJson` while the binding writes `currentPageId`. `state` is therefore
+ * observed but never writable; see `Registry.observedStates()`.
+ */
+export interface JsonListSpace {
+    readonly kind: "jsonList";
+    /** State holding the JSON document. Often not the bound state. */
+    readonly state: StateId;
+    /**
+     * Dotted path to the array within the document, e.g. `pages`. Omitted when
+     * the document is itself the array — ATEM's `tally.programInputs` is a bare
+     * `[1, 3]`.
+     */
+    readonly path?: string;
+    /**
+     * Property of each element holding the value to write. Omitted means the
+     * element *is* the value, which is what a bare array of numbers needs.
+     */
+    readonly valueKey?: string;
+    /** Property of each element holding the display name. Falls back to the value. */
+    readonly nameKey?: string;
+}
 
 export interface StateBinding {
     readonly state: StateId;

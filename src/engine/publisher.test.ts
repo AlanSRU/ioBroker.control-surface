@@ -155,6 +155,24 @@ it("a genuinely numeric value space still publishes as a number", () => {
     assert.deepEqual(program.states, { 3: "Camera 3" });
 });
 
+it("a page menu read out of a layout document reaches the published tree", () => {
+    // The payoff for `jsonList`: a renderer offers the deck's real pages, by
+    // name, without knowing that streamdeck keeps them in a JSON state.
+    const tree = treeOf({
+        values: {
+            "streamdeck.0.decks.reception.layoutJson": JSON.stringify({
+                pages: [
+                    { id: "home", name: "Home", mode: "mixed", buttons: [] },
+                    { id: "matchday", name: "Match Day", mode: "direct", buttons: [] },
+                ],
+            }),
+        },
+    });
+    const page = objectAt(`${ROOT}.surface.reception.navigation.page`, objectsFor(registry, tree)).common;
+    assert.equal(page.type, "string", "page ids are strings, whatever they look like");
+    assert.deepEqual(page.states, { home: "Home", matchday: "Match Day" });
+});
+
 it("an unresolved value space publishes no options rather than an empty list", () => {
     // A selector with no options is a broken control; one with none declared is
     // a control whose list has not arrived.

@@ -26,6 +26,15 @@ const acmTree = treeOf({
     },
 });
 
+/** A reception deck with a layout, as `streamdeck` publishes it. */
+const deckTree = treeOf({
+    values: {
+        "streamdeck.0.decks.reception.layoutJson": JSON.stringify({
+            pages: [{ id: "matchday", name: "Match Day", mode: "mixed", buttons: [] }],
+        }),
+    },
+});
+
 /**
  * Asserts an invocation planned, and returns its writes.
  *
@@ -186,9 +195,28 @@ it("a sky-remote button plans even though nothing can ever read it back", () => 
 
 it("navigating a surface is an ordinary action", () => {
     // A Stream Deck page change goes through the same path as a projector
-    // input; there is no surface-specific branch anywhere.
-    const writes = writesOf(plan(invoke("surface.reception", "navigation", "page", "matchday"), registry, empty));
+    // input; there is no surface-specific branch anywhere. The page menu comes
+    // out of the deck's layout document, so the tree has to hold one.
+    const writes = writesOf(plan(invoke("surface.reception", "navigation", "page", "Match Day"), registry, deckTree));
     assert.deepEqual(writes, [{ state: "streamdeck.0.decks.reception.currentPageId", value: "matchday", ack: false }]);
+});
+
+it("a page the layout does not declare is refused", () => {
+    // The consequence of the page list being a real value space: a panel can no
+    // longer be sent to a page that does not exist.
+    const result = plan(invoke("surface.reception", "navigation", "page", "backstage"), registry, deckTree);
+    assert.deepEqual(result, { ok: false, reason: "value-rejected", value: "backstage" });
+});
+
+it("navigation is refused while the deck's layout is unreadable", () => {
+    // Distinct from the above: nothing is wrong with the value, the menu simply
+    // is not there yet. Conflating the two sends an operator hunting a typo.
+    const result = plan(invoke("surface.reception", "navigation", "page", "matchday"), registry, empty);
+    assert.deepEqual(result, {
+        ok: false,
+        reason: "unresolved",
+        state: "streamdeck.0.decks.reception.currentPageId",
+    });
 });
 
 it("planning never writes to an undeclared state", () => {

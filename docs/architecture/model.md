@@ -467,13 +467,16 @@ producing a resource unattended.
 This is the most consequential finding here and it changes the build order:
 there is no discovery engine to write in Phase 1.
 
-### Value spaces are not uniform, so `ValueSpace` has three forms
+### Value spaces are not uniform, so `ValueSpace` has four forms
 
 - iiyama and Atlona publish `common.states` on the source state, so the value
   space is discoverable — `{ kind: "objectStates" }`.
 - Blustream transmitter ids and ATEM input numbers exist only at runtime and
   come from elsewhere in the object tree — `{ kind: "resourceIds" }`, which is
   why `ResourceCollection` exists at all.
+- The Stream Deck's page list is in neither place: it is inside a JSON document
+  held in one state — `{ kind: "jsonList" }`. See *A value space may live inside
+  another state* below.
 - Anything else needs an explicit table.
 
 A single mapping mechanism would have failed on ACM.
@@ -500,6 +503,45 @@ Reading a numeric-looking key as a number is equally wrong: the Blustream C66's
 (`{'01': 'HDMI 1', … '06': 'HDMI 6'}`), and sending `1` for `"01"` is a value
 the device does not accept. The production venue system carries a note about
 exactly this, so it is a live bug class rather than a hypothetical.
+
+### A value space may live inside another state
+
+`ResourceCollection` assumes the options are discoverable from the object tree
+by pattern. For Blustream and the ATEM they are. `iobroker.streamdeck` breaks
+the assumption completely: a deck's entire page list is inside
+`decks.<id>.layoutJson` as `{ pages: [{ id, name, … }] }`, so the pages that
+`currentPageId` will accept appear **nowhere as objects**. `surface.reception`
+shipped with a `navigation` action that could be invoked but never offered as a
+menu, and that gap was recorded here as the most load-bearing one left.
+
+`{ kind: "jsonList", state, path?, valueKey?, nameKey? }` closes it. The three
+optional fields are the same three questions `ResourceCollection` answers for
+the object tree — where the list is, which part of a member is the value, which
+part is the label — asked of a document instead. All three are optional because
+ATEM's `tally.programInputs` is a bare `[1, 3]`: no path, no keys, the element
+*is* the value.
+
+Three things fell out of building it.
+
+**The document is not the bound state, and must never be writable.** The pages
+are in `layoutJson` while the binding writes `currentPageId`. So the document
+joins `observedStates()` and stays out of `permits()` — exactly the asymmetry
+that already existed for owner connection states, for the same reason. It has
+to be subscribed, because re-authoring a layout in the React tab must change
+the menu here with nothing reloaded; it must never be written, because this
+layer does not author layouts.
+
+**The C66 trap does not have a third entrance.** `common.states` keys are
+strings and have to be coerced against the declared `common.type`; JSON carries
+its own types, so `"01"` parses as the string it is and `1` as the number it is.
+There is no type decision to get wrong, and the resolver makes none.
+
+**A real value space is a real refusal.** Before this, any string could be
+written to `currentPageId`; now only a page the layout declares. A deck whose
+layout has not been read yet refuses navigation as `unresolved` rather than
+`value-rejected` — the distinction the engine already draws, arriving here
+unchanged. Two existing tests had to supply a layout, which is the behaviour
+change stating itself.
 
 ### Broadcast routing has no destination
 
@@ -730,7 +772,7 @@ things fall out of the findings above:
   states crosses that boundary. This reinforces decision 1 from a direction that
   decision did not consider.
 
-Phase 1 is therefore: resource registry, binding resolver (three value-space
+Phase 1 is therefore: resource registry, binding resolver (four value-space
 forms, unresolved bindings), action engine, feedback engine, state publisher,
 sequence engine. `showcontrol`'s cue runner is prior art for the last, and two
 of its decisions carried over unchanged: steps run sequentially unless something
@@ -746,8 +788,8 @@ already has schedules, scripts and Blockly for it.
 
 ## Still unanswered
 
-- The repository name is not settled, and unlike `iobroker.showcontrol` it has
-  had no npm or adapter-catalogue availability check.
+- ~~The repository name is not settled.~~ Settled 2026-09-11: `control-surface`
+  is free on npm and absent from the 802-entry adapter catalogue.
 - ~~Scenes reference resources by id; nothing yet says what happens when a scene
   references a resource whose binding is unresolved at execution time.~~
   Answered by splitting it in two. A reference that can *never* work — an
@@ -756,13 +798,10 @@ already has schedules, scripts and Blockly for it.
   outright. A binding unresolved *right now* is a runtime condition nothing
   static can predict, it surfaces as a `refused` step failure, and
   `FailurePolicy` decides what happens next. Default is `abort`.
-- `ResourceCollection` assumes members are discoverable from the object tree by
-  pattern. That holds for Blustream and ATEM. It has not been checked against an
-  adapter that publishes a list as a single JSON state — ATEM's
-  `tally.programInputs` is `role: 'json'`, and the Stream Deck's page list is
-  inside `layoutJson`, so `surface.reception` has a `navigation` action with no
-  value space for exactly this reason. This is now the most load-bearing gap:
-  a fourth `ValueSpace` form reading a path out of a JSON state looks likely.
+- ~~`ResourceCollection` assumes members are discoverable from the object tree
+  by pattern, and a list published as a single JSON state has nowhere to go.~~
+  Closed by `jsonList` — see *A value space may live inside another state*.
+  `surface.reception`'s `navigation` now offers the deck's real pages by name.
 - Semantic ids become ioBroker object ids once published, so they inherit
   ioBroker's charset rules — no `*`, no whitespace, and a `.` means a tree level.
   `display.lobby` becoming `resources.display.lobby` is desirable, but the

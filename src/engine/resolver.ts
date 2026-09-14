@@ -1,6 +1,6 @@
 /**
  * The binding resolver: translates between a capability's value space and the
- * device's own, for all three `ValueSpace` forms.
+ * device's own, for all four `ValueSpace` forms.
  *
  * This is the function `iobroker-react` implements three times — in
  * `VenueConfig.js`, `AreaSchedulerService.js` and `MacroSchedulerService.js` —
@@ -11,7 +11,7 @@
  * without an ioBroker running.
  */
 
-import type { ResourceCollection, StateBinding, StateId, StateValue, ValueSpace } from "../model";
+import type { JsonListSpace, ResourceCollection, StateBinding, StateId, StateValue, ValueSpace } from "../model";
 import type { Registry } from "./registry";
 
 export type { StateValue };
@@ -80,7 +80,17 @@ export type Unresolved =
     /** The collection is declared but its members are not in the tree yet. */
     | { readonly reason: "no-members"; readonly collection: string }
     /** The binding names a collection the registry does not hold. */
-    | { readonly reason: "unknown-collection"; readonly collection: string };
+    | { readonly reason: "unknown-collection"; readonly collection: string }
+    /**
+     * The JSON document is missing, empty, unparseable, or its path does not
+     * lead to an array.
+     *
+     * One reason rather than four on purpose. Every one of them means the same
+     * thing to a caller — the menu is not available yet — and `streamdeck`
+     * publishes `layoutJson` with `def: ""`, so an unconfigured deck is
+     * indistinguishable from an absent one anyway.
+     */
+    | { readonly reason: "no-json-list"; readonly state: StateId };
 
 export type Options =
     | {
@@ -137,7 +147,81 @@ export function optionsFor(binding: StateBinding, registry: Registry, source: Ob
             }
             return { ok: true, options: members.map(m => memberOption(m, collection, source)) };
         }
+
+        case "jsonList": {
+            const list = listIn(source.snapshotOf(space.state)?.val, space.path);
+            if (!list) {
+                return { ok: false, reason: "no-json-list", state: space.state };
+            }
+            // No `coerce` here, and none is needed: JSON carries its own types,
+            // so the C66 trap — a zero-padded string key read back as a number
+            // — cannot arise. "01" parses as the string it is.
+            return { ok: true, options: list.map(e => jsonOption(e, space)).filter(o => o !== undefined) };
+        }
     }
+}
+
+/**
+ * Walks a dotted path into a parsed JSON document and returns the array there.
+ *
+ * @param raw - The state's value, expected to be a JSON string
+ * @param path - Dotted path to the array, or undefined for the document root
+ * @returns The array, or undefined when there is not one at that path
+ */
+function listIn(raw: StateValue | null | undefined, path: string | undefined): ReadonlyArray<unknown> | undefined {
+    // `role: 'json'` states are strings. Anything else is not this shape.
+    if (typeof raw !== "string" || raw === "") {
+        return undefined;
+    }
+
+    let node: unknown;
+    try {
+        node = JSON.parse(raw);
+    } catch {
+        // A half-written layout is a runtime condition, not an error: the
+        // editor is mid-save and the next acknowledged value will parse.
+        return undefined;
+    }
+
+    for (const segment of path === undefined || path === "" ? [] : path.split(".")) {
+        if (typeof node !== "object" || node === null) {
+            return undefined;
+        }
+        node = (node as Record<string, unknown>)[segment];
+    }
+
+    return Array.isArray(node) ? node : undefined;
+}
+
+/**
+ * Reads one list element's value and display name.
+ *
+ * @param element - One element of the resolved array
+ * @param space - The value space that named it
+ * @returns The option, or undefined when the element carries no usable value
+ */
+function jsonOption(element: unknown, space: JsonListSpace): ValueOption | undefined {
+    const raw = space.valueKey === undefined ? element : readKey(element, space.valueKey);
+    if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
+        // An element that yields no scalar cannot be written to a state, so it
+        // is not offered. Inventing an option would put a value in a menu that
+        // the device would refuse.
+        return undefined;
+    }
+
+    const name = space.nameKey === undefined ? undefined : readKey(element, space.nameKey);
+    return { name: typeof name === "string" && name !== "" ? name : String(raw), value: raw };
+}
+
+/**
+ * Reads one property off a list element.
+ *
+ * @param element - The element, which need not be an object
+ * @param key - Property name
+ * @returns The property, or undefined
+ */
+function readKey(element: unknown, key: string): unknown {
+    return typeof element === "object" && element !== null ? (element as Record<string, unknown>)[key] : undefined;
 }
 
 /**

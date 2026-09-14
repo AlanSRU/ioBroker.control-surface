@@ -13,11 +13,12 @@
  *   iobroker.blustream-mfp    main.js            v0.5.3
  *   iobroker.blackmagic-atem  src/main.ts        v0.2.9
  *   iobroker.streamdeck       src/lib/streamdeck-types.ts  v0.5.0 (b8a3b0b)
+ *                             `Layout.pages` for the page value space
  *   iobroker.samsung_tizen    main.js            v1.2.0
  *   iobroker.samsungtv        main.js            v0.0.28 (4248d59)
  */
 
-import type { Resource, ResourceCollection } from "./model";
+import type { Resource, ResourceCollection, ValueSpace } from "./model";
 
 // ---------------------------------------------------------------------------
 // iiyama ProLite — a display endpoint. The easy case.
@@ -604,6 +605,24 @@ export const skyBox: Resource = {
  * rather than by direct write. None of that is this layer's business — it is
  * the panel runtime's — which is the point.
  */
+/**
+ * The deck's page list, read out of its layout document.
+ *
+ * Declared once because the `select` and the feedback it answers must offer
+ * exactly the same set; two copies would be two chances to drift.
+ *
+ * `layoutJson` is observed, never written — `Registry.observedStates()` is
+ * wider than `permits()` for precisely this. Re-authoring a layout in the
+ * React tab therefore changes the menu here without anything being reloaded.
+ */
+const PAGES: ValueSpace = {
+    kind: "jsonList",
+    state: "streamdeck.0.decks.reception.layoutJson",
+    path: "pages",
+    valueKey: "id",
+    nameKey: "name",
+};
+
 export const receptionPanel: Resource = {
     id: "surface.reception",
     type: "surface",
@@ -612,12 +631,32 @@ export const receptionPanel: Resource = {
     capabilities: [
         {
             id: "navigation",
-            // No `objectStates` here: the page list lives inside the deck's
-            // `layoutJson` document, not in `common.states`. A value space for
-            // this is genuinely unresolved — see `docs/architecture/model.md`.
-            actions: [{ kind: "select", id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" } }],
+            // Not `objectStates`: the page list lives inside the deck's
+            // `layoutJson` document, not in `common.states`, and the pages a
+            // `currentPageId` will accept appear nowhere as objects. This is
+            // the case `jsonList` exists for — `Layout` in the adapter's
+            // `streamdeck-types.ts` is `{ pages: [{ id, name, … }] }`.
+            actions: [
+                {
+                    kind: "select",
+                    id: "page",
+                    binding: {
+                        state: "streamdeck.0.decks.reception.currentPageId",
+                        values: PAGES,
+                    },
+                },
+            ],
             feedback: [
-                { id: "page", binding: { state: "streamdeck.0.decks.reception.currentPageId" }, presentation: "text" },
+                {
+                    id: "page",
+                    binding: {
+                        state: "streamdeck.0.decks.reception.currentPageId",
+                        values: PAGES,
+                    },
+                    // `selection` rather than `text` now the space exists: the
+                    // state holds a page id and a person reads the page name.
+                    presentation: "selection",
+                },
             ],
         },
         {

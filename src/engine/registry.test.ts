@@ -47,10 +47,46 @@ it("the observation set is wider than the write whitelist", () => {
     assert.ok(observed.has("atlona-sw510w.0.info.connection"));
     assert.equal(registry.permits("atlona-sw510w.0.info.connection"), false);
 
+    // A jsonList document is the same case: the page menu has to refresh when
+    // the layout is re-authored, and nothing here may ever write a layout back.
+    assert.ok(observed.has("streamdeck.0.decks.reception.layoutJson"));
+    assert.equal(registry.permits("streamdeck.0.decks.reception.layoutJson"), false);
+
     // Everything writable is also observed.
     for (const state of registry.boundStates()) {
         assert.ok(observed.has(state), `${state} is writable but not observed`);
     }
+});
+
+it("a jsonList that names something other than a state id is rejected", () => {
+    // The state can never resolve, so it is a configuration fault and belongs
+    // with the unknown collection rather than with the runtime conditions.
+    const resource: Resource = {
+        id: "surface.test",
+        type: "surface",
+        owner: "streamdeck.0",
+        capabilities: [
+            {
+                id: "navigation",
+                actions: [
+                    {
+                        kind: "select",
+                        id: "page",
+                        binding: {
+                            state: "streamdeck.0.decks.test.currentPageId",
+                            values: { kind: "jsonList", state: "layoutJson", path: "pages" },
+                        },
+                    },
+                ],
+                feedback: [],
+            },
+        ],
+    };
+
+    const { registry, problems } = Registry.load([resource], []);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0]!.reason, /not a full state id/);
+    assert.equal(registry.allResources().length, 0);
 });
 
 it("owner connection follows the ioBroker convention", () => {
