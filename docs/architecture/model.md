@@ -1,10 +1,12 @@
 # The semantic model, and what the real adapters did to it
 
 **Status:** both open decisions are settled — see decisions 1 and 2 below — and
-the engine core has started. `src/engine/registry.ts` and
-`src/engine/resolver.ts` exist and are tested; there is no adapter yet. The interfaces live in
-[`src/model.ts`](../../src/model.ts); the six adapters mapped onto them live in
-[`src/mapping.ts`](../../src/mapping.ts) and are verified by `npm run check`.
+Phase 1 is built. The engine components in `src/engine/` are complete and
+tested, and `src/main.ts` is the adapter around them: it has run against real
+equipment. What remains before release is the review gate, not more engine. The
+interfaces live in [`src/model.ts`](../../src/model.ts); the adapters mapped
+onto them live in [`src/mapping.ts`](../../src/mapping.ts) and are verified by
+`npm run verify`.
 
 This is the brief's sections 46 and 47 carried out: define the interfaces, then
 map the actual equipment onto them before writing any engine.
@@ -814,11 +816,21 @@ already has schedules, scripts and Blockly for it.
   unacknowledged or the owner is down". The engine computes the last two and
   cannot compute the first: nothing says what window is right, and one window
   cannot fit both `operatingHours`, which moves hourly, and `power`, which may
-  not move for weeks. The one concrete case is a Stream Deck whose Pi service
-  dies without clearing `connected` — `lastHeartbeat` reveals it while
-  `connected` stays true — and that is a *heartbeat* problem, not a value-age
-  one. Closing it properly wants something like TouchBroker's per-binding health
-  source rather than a timeout on every reading.
+  not move for weeks.
+
+  **Corrected 2026-09-14: the one concrete case does not exist.** This said a
+  Stream Deck whose Pi service dies leaves `connected` true while
+  `lastHeartbeat` goes cold. `iobroker.streamdeck` does not behave that way: it
+  runs `checkDeckHeartbeats` on a timer and clears `connected` itself once the
+  heartbeat is older than `deckOfflineTimeoutMs` (`src/main.ts`, present in the
+  0.5.0 commit this mapping pins). The survey read `DECK_STATE_SUFFIXES` and the
+  state list and never looked at the watchdog — the same miss as the ACM's
+  `system.commands.*`, in the same way, one adapter later.
+
+  That leaves no evidence for a per-binding health source. Staleness of a
+  *device* is the device adapter's question and this one answers it, which is
+  the division of labour decision 1 assumes. Build nothing here until an adapter
+  turns up that genuinely cannot answer it.
 - **Relative level actions are not expressible.** The brief's section 9 lists
   `volume.up` and `volume.down`, but an `ActionInvocation` carries a value and no
   direction, so `level.step` is read by the engine as granularity — a slider's
