@@ -1,7 +1,8 @@
 # Auto-merges Dependabot PRs according to the rules in .github/auto-merge.yml.
 #
-# Replaces the scaffold's dependabot-auto-merge.yml, which used
-# ahmadnassri/action-dependabot-auto-merge — that action no longer works.
+# Replaces the scaffold's dependabot-auto-merge.yml, whose action is dead.
+# Do not name that action even in a comment: repochecker's E8912 matches the
+# string anywhere in the file, so a comment about it fails the check.
 
 name: Auto-Merge Dependabot PRs
 
