@@ -148,7 +148,7 @@ export function objectsFor(registry: Registry, source: ObjectSource): ReadonlyAr
                     type: "state",
                     // A shared id means one read/write state; the registry has
                     // already checked both bind the same device state.
-                    common: actionCommon(action, feedbackIds.has(action.id), registry, source),
+                    common: actionCommon(action, registry, source),
                 });
             }
             for (const feedback of capability.feedback) {
@@ -299,12 +299,11 @@ function qualityOf(reason: string | undefined): Quality {
  * opposite direction and costs nothing.
  *
  * @param action - The declared action
- * @param readable - Whether a feedback of the same id shares its state
  * @param registry - The declared resources
  * @param source - View of the object tree
  * @returns The `common` block
  */
-function actionCommon(action: ActionDef, readable: boolean, registry: Registry, source: ObjectSource): PublishedCommon {
+function actionCommon(action: ActionDef, registry: Registry, source: ObjectSource): PublishedCommon {
     const name = action.id;
 
     switch (action.kind) {
@@ -336,7 +335,13 @@ function actionCommon(action: ActionDef, readable: boolean, registry: Registry, 
                 type: space.type,
                 // A writable number is `level`; a writable string is `text`.
                 role: space.type === "number" ? "level" : "text",
-                read: readable,
+                // Always readable, whatever the sibling feedback is called.
+                // A write-only `level` is repochecker's E1010, and the
+                // declaration would be a lie either way: `statesFor` writes the
+                // device's current value into this very state on every publish,
+                // so a selector whose feedback merely carries a different id
+                // would be telling a panel the value it can see is not there.
+                read: true,
                 write: true,
                 ...(space.states ? { states: space.states } : {}),
             };

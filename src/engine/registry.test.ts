@@ -147,11 +147,30 @@ it("a bad declaration is dropped without taking the others down", () => {
     assert.ok(registry.getResource("good.one"));
     assert.equal(registry.getResource("bad one"), undefined);
     assert.equal(problems.length, 1);
-    assert.match(problems[0]!.reason, /may not contain/);
+    assert.match(problems[0]!.reason, /would rewrite/);
 });
 
 it("semantic ids are rejected when they cannot be object ids", () => {
-    for (const id of ["has space", "star*", "trailing.", ".leading", "double..dot", ""]) {
+    // The comma, quote, semicolon, angle brackets and backslash are the ones
+    // that matter most: ioBroker rewrites them to _ rather than refusing them,
+    // so the control publishes at an id the write map does not hold and the
+    // button silently does nothing.
+    for (const id of [
+        "has space",
+        "star*",
+        "trailing.",
+        ".leading",
+        "double..dot",
+        "",
+        "room1,matrix",
+        "display.lobby?",
+        "it's",
+        'say"what',
+        "semi;colon",
+        "angle<bracket",
+        "back\\slash",
+        "square[bracket]",
+    ]) {
         const { problems } = Registry.load([resourceOf({ id })], []);
         assert.equal(problems.length, 1, `expected "${id}" to be rejected`);
     }
@@ -243,4 +262,50 @@ it("duplicate actions within a capability are caught", () => {
     });
     const { problems } = Registry.load([resource], []);
     assert.match(problems[0]!.reason, /duplicate action "power.on"/);
+});
+
+it("a structurally incomplete declaration is a problem, not a crash", () => {
+    // These arrive as hand-written JSON through a textarea with no schema and
+    // are cast, not parsed, so every one of them used to throw a TypeError out
+    // of onReady — which js-controller answers by restarting the instance with
+    // the same configuration, forever.
+    const cases: ReadonlyArray<[string, unknown]> = [
+        ["not an object", 42],
+        ["no capabilities", { id: "a.b", type: "t", owner: "x.0" }],
+        ["capabilities not an array", { id: "a.b", type: "t", owner: "x.0", capabilities: {} }],
+        [
+            "capability with no actions",
+            {
+                id: "a.b",
+                type: "t",
+                owner: "x.0",
+                capabilities: [{ id: "health", feedback: [] }],
+            },
+        ],
+        [
+            "capability with no feedback",
+            { id: "a.b", type: "t", owner: "x.0", capabilities: [{ id: "power", actions: [] }] },
+        ],
+        [
+            "action with no binding",
+            {
+                id: "a.b",
+                type: "t",
+                owner: "x.0",
+                capabilities: [{ id: "power", actions: [{ kind: "set", id: "on" }], feedback: [] }],
+            },
+        ],
+    ];
+
+    for (const [what, declaration] of cases) {
+        const { registry, problems } = Registry.load([declaration as Resource], []);
+        assert.equal(problems.length, 1, `expected "${what}" to be reported`);
+        assert.equal(registry.allResources().length, 0, `expected "${what}" to be dropped`);
+    }
+});
+
+it("a collection with no members pattern is a problem, not a crash", () => {
+    const { registry, problems } = Registry.load([], [{ id: "c", type: "t", owner: "x.0" } as ResourceCollection]);
+    assert.equal(problems.length, 1);
+    assert.equal(registry.getCollection("c"), undefined);
 });

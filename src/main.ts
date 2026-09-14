@@ -37,6 +37,29 @@ import { WriteLog } from "./engine/writes";
 /** Debounce for republishing after a burst of foreign state changes. */
 const REPUBLISH_MS = 50;
 
+/** The largest value `setTimeout` accepts before its validator throws. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * Forces a scene delay into the range a timer will accept.
+ *
+ * `SceneBook.load` already rejects a delay that is not a number or is out of
+ * range, so nothing valid reaches here needing correction. This is the second
+ * belt: `setTimeout`'s validator *throws* rather than clamping, and a throw
+ * inside a running scene is an unhandled rejection that terminates the instance
+ * mid-show. Failing by waiting the wrong length of time is recoverable; failing
+ * by stopping half-way through switching a stage is not.
+ *
+ * @param ms - The configured delay
+ * @returns A delay a timer will accept
+ */
+function clampDelay(ms: number): number {
+    if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) {
+        return 0;
+    }
+    return Math.min(ms, MAX_TIMER_MS);
+}
+
 /** The adapter: `ObjectSource` and `Effects` over ioBroker, and nothing more. */
 class ControlSurface extends utils.Adapter {
     private registry = Registry.load([], []).registry;
@@ -50,6 +73,29 @@ class ControlSurface extends utils.Adapter {
 
     /** Last value published per id, so unchanged states are not rewritten. */
     private readonly published = new Map<string, string>();
+
+    /**
+     * Last `common` published per object id, so unchanged objects are not
+     * rewritten. Object descriptions change far less often than values do —
+     * usually only when a collection fills — but `publish()` runs on every
+     * device change, and `extendObject` is a read plus a write that stamps a
+     * fresh `ts` and broadcasts an `objectChange` to every admin session and
+     * subscribing adapter whether or not anything differs.
+     */
+    private readonly describedAs = new Map<string, string>();
+
+    /**
+     * Set at the top of `onUnload`, before anything else.
+     *
+     * `onReady` is a long sequential await chain — one object and one state read
+     * per bound state, four queries per collection, then a subscription per
+     * observed state — and pressing Save in admin restarts the instance
+     * part-way through it. Without this flag the remaining writes hit a closing
+     * objects DB and reject, and the subscriptions that follow are registered
+     * for an instance that has already stopped; under `compact: true` the host
+     * process outlives the instance, so those orphans keep running.
+     */
+    private unloaded = false;
 
     /** Foreign states and objects, kept current by subscription. */
     private readonly states = new Map<string, StateSnapshot>();
@@ -70,6 +116,7 @@ class ControlSurface extends utils.Adapter {
         super({ ...options, name: "control-surface" });
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
+        this.on("objectChange", this.onObjectChange.bind(this));
         this.on("unload", this.onUnload.bind(this));
     }
 
@@ -80,16 +127,32 @@ class ControlSurface extends utils.Adapter {
         const resources = this.parseConfig<Resource>("resources");
         const collections = this.parseConfig<ResourceCollection>("collections");
 
-        const loaded = Registry.load(resources, collections);
-        this.registry = loaded.registry;
-        for (const problem of loaded.problems) {
-            this.log.warn(`${problem.where}: ${problem.reason}`);
-        }
+        // `Registry.load` and `SceneBook.load` report a malformed declaration
+        // rather than throwing on one, so this catches only a fault they did not
+        // anticipate. It is here because the cost of being wrong is specific and
+        // bad: a throw out of `onReady` is a restart, with the same
+        // configuration, which is a loop that ends when someone finds the
+        // textarea. Starting with nothing declared at least keeps the instance
+        // up and the reason in the log.
+        try {
+            const loaded = Registry.load(resources, collections);
+            this.registry = loaded.registry;
+            for (const problem of loaded.problems) {
+                this.log.warn(`${problem.where}: ${problem.reason}`);
+            }
 
-        const scenes = SceneBook.load(this.parseConfig<Scene>("scenes"), this.registry);
-        this.scenes = scenes.book;
-        for (const problem of scenes.problems) {
-            this.log.warn(`${problem.where}: ${problem.reason}`);
+            const scenes = SceneBook.load(this.parseConfig<Scene>("scenes"), this.registry);
+            this.scenes = scenes.book;
+            for (const problem of scenes.problems) {
+                this.log.warn(`${problem.where}: ${problem.reason}`);
+            }
+        } catch (error) {
+            this.log.error(
+                `Could not read the configured declarations (${(error as Error).message}); ` +
+                    `starting with none. Fix them in the instance configuration.`,
+            );
+            this.registry = Registry.load([], []).registry;
+            this.scenes = SceneBook.load([], this.registry).book;
         }
 
         this.targets = writeTargets(this.registry);
@@ -106,7 +169,19 @@ class ControlSurface extends utils.Adapter {
         // Only what the registry declares, plus the owner connection states
         // health is derived from. Nothing else is ever subscribed.
         for (const state of this.registry.observedStates()) {
+            if (this.unloaded) {
+                return;
+            }
             await this.subscribeForeignStatesAsync(state);
+            // Objects too, not just values: a bound object's `common.states` is
+            // where a value space comes from, and an adapter that builds its
+            // tree after connecting publishes that object long after we read it.
+            await this.subscribeForeignObjectsAsync(state);
+        }
+        for (const collection of this.collections()) {
+            await this.subscribeForeignObjectsAsync(
+                `${collection.members.slice(0, collection.members.lastIndexOf("."))}.*`,
+            );
         }
         // Our own published tree, so a panel's write becomes an invocation.
         this.subscribeStates(`${ROOT}.*`);
@@ -146,6 +221,13 @@ class ControlSurface extends utils.Adapter {
     /** Fills the caches the engine reads through `ObjectSource`. */
     private async primeCache(): Promise<void> {
         for (const id of this.registry.observedStates()) {
+            // Checked every iteration, not once at the top: this loop is one
+            // object read plus one state read per bound state, so on a real
+            // venue it is long enough for a Save in admin to land in the middle
+            // of it.
+            if (this.unloaded) {
+                return;
+            }
             const object = await this.getForeignObjectAsync(id);
             if (object?.common) {
                 this.meta.set(id, object.common as StateMeta);
@@ -157,6 +239,9 @@ class ControlSurface extends utils.Adapter {
         }
 
         for (const collection of this.registry.allResources().length > 0 ? this.collections() : []) {
+            if (this.unloaded) {
+                return;
+            }
             await this.primeCollection(collection);
         }
     }
@@ -267,12 +352,27 @@ class ControlSurface extends utils.Adapter {
 
     /** Creates the semantic tree and writes every state that has changed. */
     private async publish(): Promise<void> {
+        if (this.unloaded) {
+            return;
+        }
         const source = this.source();
 
         for (const object of objectsFor(this.registry, source)) {
             // `extendObject` rather than `setObjectNotExists`: a state's value
             // labels are resolved at runtime and change as a collection fills,
             // and "if not exists" would freeze whatever was known at first run.
+            //
+            // Fingerprinted for the same reason the values below are. `publish()`
+            // runs after every device change, and rewriting all 138 objects each
+            // time is hundreds of object-DB reads and writes per Stream Deck
+            // heartbeat — and it put `common.name` back on every cycle, so a
+            // state renamed in admin snapped back within 50ms.
+            const fingerprint = JSON.stringify(object.common);
+            if (this.describedAs.get(object.id) === fingerprint) {
+                continue;
+            }
+            this.describedAs.set(object.id, fingerprint);
+
             const { name, desc } = object.common;
             const common = desc === undefined ? { name } : { name, desc };
 
@@ -369,7 +469,9 @@ class ControlSurface extends utils.Adapter {
             // Momentary, like showcontrol's cue trigger: only a truthy,
             // unacknowledged write is a command.
             if (!state.ack && state.val) {
-                void this.runScene(scene);
+                void this.runScene(scene).catch((error: unknown) => {
+                    this.log.error(`Scene "${scene}" failed: ${String(error)}`);
+                });
             }
             return;
         }
@@ -380,7 +482,9 @@ class ControlSurface extends utils.Adapter {
             // publications come back through here and must be ignored, or the
             // adapter would answer itself.
             if (!state.ack) {
-                void this.invoke(target, state.val);
+                void this.invoke(target, state.val).catch((error: unknown) => {
+                    this.log.error(`${target.resource}.${target.capability}.${target.action} failed: ${String(error)}`);
+                });
             }
             return;
         }
@@ -390,6 +494,47 @@ class ControlSurface extends utils.Adapter {
         // one is another command — quite possibly our own arriving back through
         // the subscription — and would let every write confirm itself.
         this.writes.observed(id, state.ack);
+        this.scheduleRepublish();
+    }
+
+    /**
+     * Keeps the object caches current.
+     *
+     * Without this the object tree was read once, at startup, and never again.
+     * On a host reboot every instance starts at once and `blackmagic-atem`
+     * builds `inputs.*` and `me1.*` only after it has reached the mixer, so the
+     * caches were primed from a tree that did not exist yet. The effect was
+     * permanent rather than transient: `optionsFor` kept answering
+     * `no-object-states`, every `route` and `select` was refused as
+     * `unresolved`, and input switching stayed dead until this adapter itself
+     * was restarted.
+     *
+     * @param id - Object that changed
+     * @param object - Its new definition, or null when it was deleted
+     */
+    private onObjectChange(id: string, object: ioBroker.Object | null | undefined): void {
+        if (this.unloaded) {
+            return;
+        }
+
+        if (object?.common) {
+            this.meta.set(id, object.common as StateMeta);
+        } else {
+            this.meta.delete(id);
+        }
+
+        // A collection's membership is a query, not a value, so an object
+        // appearing or vanishing underneath the pattern is the only signal that
+        // it needs running again.
+        for (const collection of this.collections()) {
+            const parent = collection.members.slice(0, collection.members.lastIndexOf("."));
+            if (id.startsWith(`${parent}.`)) {
+                void this.primeCollection(collection).catch((error: unknown) => {
+                    this.log.warn(`Could not re-read collection "${collection.id}": ${String(error)}`);
+                });
+            }
+        }
+
         this.scheduleRepublish();
     }
 
@@ -505,7 +650,11 @@ class ControlSurface extends utils.Adapter {
 
         const effects: Effects = {
             write: writes => this.applyWrites(writes),
-            sleep: ms => new Promise(resolve => this.setTimeout(() => resolve(), ms)),
+            // Clamped as well as validated at load. `setTimeout`'s validator
+            // throws rather than clamping, and a throw here is an unhandled
+            // rejection part-way through a scene: equipment half-configured and
+            // the status state stuck at `running`.
+            sleep: ms => new Promise(resolve => this.setTimeout(() => resolve(), clampDelay(ms))),
             source: () => this.source(),
         };
 
@@ -533,6 +682,9 @@ class ControlSurface extends utils.Adapter {
      */
     private onUnload(callback: () => void): void {
         try {
+            // First, before any other statement: everything still in flight
+            // checks this to decide whether to keep going.
+            this.unloaded = true;
             if (this.republishTimer) {
                 this.clearTimeout(this.republishTimer);
                 this.republishTimer = undefined;

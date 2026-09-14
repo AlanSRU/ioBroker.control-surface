@@ -370,3 +370,31 @@ it("an unconfirmed write marks the control itself, not just its feedback", () =>
     const healthy = states.find(s => s.id === `${ROOT}.lounge.skybox.healthy`);
     assert.equal(healthy?.val, false, "the resource should not read healthy");
 });
+
+it("no published state is a write-only level", () => {
+    // repochecker's E1010: `level` is defined as read+write, so a write-only
+    // one fails against the live object dump at PR time. It fired for a numeric
+    // `select` whose sibling feedback simply had a different id — including
+    // resources.atem.me1.program.source.select, the state the bench notes
+    // record as the one driven against the real mixer.
+    const tree = treeOf({
+        meta: {
+            "iiyama-prolite.0.inputSource": { type: "number", states: { 1: "HDMI1" } },
+            "blackmagic-atem.0.me0.programInput": { type: "number" },
+        },
+        values: {
+            "blackmagic-atem.0.inputs.input3.inputId": 3,
+            "blackmagic-atem.0.inputs.input3.longName": "Camera 3",
+        },
+        members: { "blackmagic-atem.0.inputs.*": ["blackmagic-atem.0.inputs.input3"] },
+    });
+
+    for (const object of objectsFor(registry, tree)) {
+        const common = object.common;
+        if (common.role === "level") {
+            assert.equal(common.read, true, `${object.id} is a write-only level`);
+            assert.equal(common.write, true, `${object.id} is a read-only level`);
+            assert.equal(common.type, "number", `${object.id} is a non-numeric level`);
+        }
+    }
+});

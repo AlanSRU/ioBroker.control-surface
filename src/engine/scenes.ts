@@ -138,7 +138,10 @@ function stepProblems(
                             `"${step.resource}.${step.capability}.${step.feedback}" is declared inferred`,
                     );
                 }
-                if (step.timeoutMs <= 0) {
+                const badTimeout = durationProblem(step.timeoutMs);
+                if (badTimeout) {
+                    faults.push(`${at} has a timeout that ${badTimeout}`);
+                } else if (step.timeoutMs <= 0) {
                     // A wait that can never succeed is always a mistake: the
                     // step would time out before reading anything at all.
                     faults.push(`${at} has a timeout of ${step.timeoutMs}ms`);
@@ -155,11 +158,13 @@ function stepProblems(
                 break;
             }
 
-            case "delay":
-                if (step.ms < 0) {
-                    faults.push(`${at} has a negative delay`);
+            case "delay": {
+                const bad = durationProblem(step.ms);
+                if (bad) {
+                    faults.push(`${at} has a delay that ${bad}`);
                 }
                 break;
+            }
 
             case "parallel":
                 faults.push(...stepProblems(step.steps, scene, registry, known));
@@ -179,9 +184,51 @@ function stepProblems(
         if (onFailure?.kind === "retry" && onFailure.times < 1) {
             faults.push(`${at} retries ${onFailure.times} times`);
         }
+        if (onFailure?.kind === "retry") {
+            const bad = durationProblem(onFailure.delayMs);
+            if (bad) {
+                faults.push(`${at} retries after a delay that ${bad}`);
+            }
+        }
     });
 
     return faults;
+}
+
+/**
+ * The largest value `setTimeout` accepts. Above it, ioBroker's `Validator`
+ * throws rather than clamping, which takes the whole instance down.
+ */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * Checks a configured duration is one a timer will actually accept.
+ *
+ * Every duration in a scene reaches `this.setTimeout`, whose `Validator` throws
+ * on a non-number and on anything outside `0 .. 2147483647`. Thrown from inside
+ * a running scene that rejection is unhandled, so the instance is terminated
+ * part-way through — equipment left half-configured, and the scene's status
+ * state frozen at `running`. The classic trigger is not an exotic number but a
+ * quoted one: `"ms": "5000"` is valid JSON, reads correctly to a person, and is
+ * a string.
+ *
+ * Checked at load with the other decidable faults, because a duration cannot
+ * become valid later.
+ *
+ * @param ms - The configured duration
+ * @returns What is wrong with it, as a sentence fragment, or null
+ */
+function durationProblem(ms: unknown): string | null {
+    if (typeof ms !== "number" || !Number.isFinite(ms)) {
+        return `is ${JSON.stringify(ms)}, which is not a number`;
+    }
+    if (ms < 0) {
+        return `is negative (${ms}ms)`;
+    }
+    if (ms > MAX_TIMER_MS) {
+        return `is ${ms}ms, beyond the ${MAX_TIMER_MS}ms a timer accepts`;
+    }
+    return null;
 }
 
 /**

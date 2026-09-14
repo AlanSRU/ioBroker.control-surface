@@ -32,8 +32,20 @@ export interface RegistryLoad {
  * Semantic ids become ioBroker object ids once published, so they inherit its
  * charset rules. A `.` is allowed and means a tree level — `display.lobby`
  * publishes as `resources.display.lobby`.
+ *
+ * This is js-controller's own `FORBIDDEN_CHARS` allowlist
+ * (`@iobroker/adapter-core`'s `tools.js`) with the space removed, because a
+ * space is legal there and still a bad idea in an id a person has to type.
+ *
+ * It has to be the *same* set, not merely a strict one. Anything outside it is
+ * rewritten to `_` by `fixForbiddenCharsInId` on the way into `extendObject`
+ * and `setState`, while `writeTargets()` keys its map with the id as declared.
+ * A resource called `room1,matrix` therefore publishes a control at
+ * `room1_matrix`, a panel writes to the only state that exists, the lookup in
+ * `onStateChange` misses, and the button does nothing at all — with no refusal
+ * logged, because as far as the engine is concerned nothing was ever invoked.
  */
-const VALID_SEMANTIC_ID = /^[^*\s[\]]+$/;
+const VALID_SEMANTIC_ID = /^[._\-/:!#$%&()+=@^{}|~\p{Ll}\p{Lu}\p{Nd}]+$/u;
 
 /** Published as `resources.<id>.healthy`, so no capability may take the name. */
 export const RESERVED_CAPABILITY = "healthy";
@@ -55,11 +67,76 @@ export function idProblem(id: string): string | null {
         return "has no id";
     }
     if (!VALID_SEMANTIC_ID.test(id)) {
-        return `"${id}" may not contain spaces, *, [ or ]`;
+        return (
+            `"${id}" contains a character ioBroker would rewrite: use letters, ` +
+            `digits and . _ - / : ! # $ % & ( ) + = @ ^ { } | ~`
+        );
     }
     if (EMPTY_SEGMENT.test(id)) {
         return `"${id}" has an empty path segment`;
     }
+    return null;
+}
+
+/**
+ * Whether a declaration is an object at all.
+ *
+ * @param value - Anything that arrived from the configuration
+ * @returns True when it can be indexed safely
+ */
+function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+/**
+ * Checks a resource has the shape its type claims, before anything indexes it.
+ *
+ * Declarations arrive as hand-written JSON through an admin textarea with no
+ * schema and are **cast**, not parsed, so the compiler has guaranteed nothing
+ * about them. Every omission below is an ordinary first-day authoring mistake —
+ * a capability written with only `feedback` and no `actions: []`, an action with
+ * no `binding` — and each one used to throw a `TypeError` out of `Registry.load`
+ * and therefore out of `onReady`. js-controller turns that into a restart, with
+ * the same configuration, so the instance died in a loop until someone found the
+ * textarea. A declaration that cannot be read is a *problem*, exactly like a bad
+ * id: reported, skipped, and the rest of the venue keeps working.
+ *
+ * @param resource - The declared resource, as it came from the configuration
+ * @returns Why it cannot be read, or null
+ */
+function shapeProblem(resource: unknown): string | null {
+    if (!isObject(resource)) {
+        return "is not an object";
+    }
+    if (typeof resource.id !== "string") {
+        return "has no id";
+    }
+    const where = `"${resource.id}"`;
+    if (!Array.isArray(resource.capabilities)) {
+        return `${where} has no capabilities array`;
+    }
+
+    for (const capability of resource.capabilities) {
+        if (!isObject(capability) || typeof capability.id !== "string") {
+            return `${where} has a capability that is not an object with an id`;
+        }
+        // Both are required even when empty: a read-only capability still needs
+        // `actions: []`, because everything downstream iterates both.
+        for (const key of ["actions", "feedback"] as const) {
+            if (!Array.isArray(capability[key])) {
+                return `${where} capability "${capability.id}" has no ${key} array`;
+            }
+            for (const entry of capability[key]) {
+                if (!isObject(entry) || typeof entry.id !== "string") {
+                    return `${where} capability "${capability.id}" has a ${key} entry with no id`;
+                }
+                if (!isObject(entry.binding) || typeof entry.binding.state !== "string") {
+                    return `${where} capability "${capability.id}" ${key} "${entry.id}" has no binding state`;
+                }
+            }
+        }
+    }
+
     return null;
 }
 
@@ -97,6 +174,10 @@ export class Registry {
         const collectionsById = new Map<ResourceId, ResourceCollection>();
 
         for (const collection of collections) {
+            if (!isObject(collection) || typeof collection.members !== "string") {
+                problems.push({ where: "collection", reason: "is not an object with a string members pattern" });
+                continue;
+            }
             const problem = idProblem(collection.id);
             if (problem) {
                 problems.push({ where: "collection", reason: problem });
@@ -117,6 +198,11 @@ export class Registry {
         }
 
         for (const resource of resources) {
+            const shape = shapeProblem(resource);
+            if (shape) {
+                problems.push({ where: "resource", reason: shape });
+                continue;
+            }
             const problem = idProblem(resource.id);
             if (problem) {
                 problems.push({ where: "resource", reason: problem });

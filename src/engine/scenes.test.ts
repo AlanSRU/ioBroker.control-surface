@@ -291,3 +291,43 @@ it("a timeout shorter than the settling window is refused at load", () => {
     ]);
     assert.match(reasons[0]!, /times out after 5000ms but "power" needs 8000ms to settle/);
 });
+
+it("a duration a timer would reject is a load fault", () => {
+    // setTimeout's validator throws rather than clamping, and a throw inside a
+    // running scene terminates the instance mid-show — equipment left
+    // half-configured and the status state stuck at "running". The quoted
+    // number is the realistic one: valid JSON, reads correctly to a person.
+    const bad: ReadonlyArray<[string, unknown]> = [
+        ["a quoted number", "5000"],
+        ["null", null],
+        ["not a number at all", "soon"],
+        ["beyond the timer maximum", 3_000_000_000],
+    ];
+
+    for (const [what, ms] of bad) {
+        const reasons = reasonsFor([sceneOf("s", { steps: [{ kind: "delay", ms } as never] })]);
+        assert.equal(reasons.length, 1, `expected ${what} to be rejected`);
+        assert.match(reasons[0]!, /delay that/);
+    }
+
+    // A negative delay was already caught, and still is.
+    assert.match(reasonsFor([sceneOf("s", { steps: [{ kind: "delay", ms: -1 }] })])[0]!, /negative/);
+    // And an ordinary one still loads.
+    assert.deepEqual(reasonsFor([sceneOf("s", { steps: [{ kind: "delay", ms: 500 }] })]), []);
+});
+
+it("a retry delay a timer would reject is a load fault", () => {
+    const reasons = reasonsFor([
+        sceneOf("s", {
+            steps: [
+                {
+                    kind: "do",
+                    invoke: { resource: "display.lobby", capability: "power", action: "on" },
+                    onFailure: { kind: "retry", times: 2, delayMs: 3_000_000_000 },
+                },
+            ],
+        }),
+    ]);
+    assert.equal(reasons.length, 1);
+    assert.match(reasons[0]!, /retries after a delay that/);
+});
