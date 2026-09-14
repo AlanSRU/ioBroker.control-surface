@@ -309,3 +309,59 @@ it("a collection with no members pattern is a problem, not a crash", () => {
     assert.equal(problems.length, 1);
     assert.equal(registry.getCollection("c"), undefined);
 });
+
+it("a level with no bounds is rejected rather than writing NaN", () => {
+    // `undefined >= undefined` is false, so this passed the min/max comparison,
+    // published with no min/max, and then quantise returned NaN — which plan
+    // reported as a successful write and sent to live equipment as null.
+    const resource = resourceOf({
+        id: "a.b",
+        capabilities: [
+            {
+                id: "volume",
+                actions: [{ kind: "level", id: "set", binding: { state: "x.0.volume" } }],
+                feedback: [],
+            },
+        ],
+    } as unknown as Partial<Resource>);
+
+    const { problems } = Registry.load([resource], []);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0]!.reason, /without numeric min and max/);
+});
+
+it("an unknown action kind and an unknown presentation are rejected", () => {
+    const withKind = resourceOf({
+        id: "a.b",
+        capabilities: [{ id: "c", actions: [{ kind: "summon", id: "x", binding: { state: "x.0.y" } }], feedback: [] }],
+    } as unknown as Partial<Resource>);
+    assert.match(Registry.load([withKind], []).problems[0]!.reason, /unknown kind/);
+
+    const withPresentation = resourceOf({
+        id: "a.b",
+        capabilities: [
+            { id: "c", actions: [], feedback: [{ id: "x", binding: { state: "x.0.y" }, presentation: "dial" }] },
+        ],
+    } as unknown as Partial<Resource>);
+    assert.match(Registry.load([withPresentation], []).problems[0]!.reason, /unknown presentation/);
+});
+
+it("capability, action and feedback ids are charset-checked like resource ids", () => {
+    // They are published as path segments too, so an id ioBroker would rewrite
+    // produces a control at one id and a write map keyed to another: the button
+    // does nothing, and nothing is logged.
+    for (const capabilityId of ["音量", "pre'set", "a,b"]) {
+        const resource = resourceOf({
+            id: "a.b",
+            capabilities: [
+                {
+                    id: capabilityId,
+                    actions: [{ kind: "set", id: "on", binding: { state: "x.0.y" }, value: true }],
+                    feedback: [],
+                },
+            ],
+        } as unknown as Partial<Resource>);
+        const { problems } = Registry.load([resource], []);
+        assert.equal(problems.length, 1, `expected "${capabilityId}" to be rejected`);
+    }
+});

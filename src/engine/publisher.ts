@@ -107,19 +107,30 @@ export function objectsFor(registry: Registry, source: ObjectSource): ReadonlyAr
     const objects: PublishedObject[] = [{ id: ROOT, type: "folder", common: { name: "Resources" } }];
     const emitted = new Set<string>([ROOT]);
 
+    // One id must produce one object. `display.lobby` makes `resources.display`
+    // a folder, so declaring both `room1` and `room1.matrix` — a room beside the
+    // equipment in it, which the mapping's own `room1.*` naming invites — used
+    // to emit `resources.room1` twice, once as a device and once as a folder.
+    // Both reached `publish()`, so the object's type flipped and the two
+    // descriptions fought each other under a single fingerprint, rewriting on
+    // every republish forever. The device wins, because it is the thing an
+    // administrator actually declared; the folder is only scaffolding. Collected
+    // up front so the answer does not depend on declaration order.
+    const declared = new Set(registry.allResources().map(r => `${ROOT}.${r.id}`));
+
     for (const resource of registry.allResources()) {
-        // `display.lobby` becomes `resources.display` + `resources.display.lobby`,
-        // so every segment but the last is an organisational folder.
+        // Every segment but the last is an organisational folder.
         const segments = resource.id.split(".");
         segments.slice(0, -1).forEach((_, index) => {
             const id = `${ROOT}.${segments.slice(0, index + 1).join(".")}`;
-            if (!emitted.has(id)) {
+            if (!emitted.has(id) && !declared.has(id)) {
                 emitted.add(id);
                 objects.push({ id, type: "folder", common: { name: segments[index]! } });
             }
         });
 
         const base = `${ROOT}.${resource.id}`;
+        emitted.add(base);
         objects.push({
             id: base,
             type: "device",
@@ -196,13 +207,28 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
         for (const capability of resource.capabilities) {
             for (const action of capability.actions) {
                 // An action state carries whatever its bound state currently
-                // holds, which for a write-only trigger is nothing.
-                const snapshot = source.snapshotOf(action.binding.state);
+                // holds — except a momentary one, which carries nothing.
+                //
+                // `set` and `toggle` publish as `button`, `type: "boolean"`,
+                // `read: false`, because `power.on` is an instruction and not a
+                // question. Writing the bound state's value into them anyway
+                // made that declaration false the moment the binding was not
+                // itself boolean: an ordinary "Laptop" button declared as
+                // `{"kind": "set", "value": 3}` on a numeric input published a
+                // boolean state permanently carrying 3, which js-controller
+                // complains about on every publish and which every consumer
+                // trusting `common.type` reads wrongly.
+                const momentary = action.kind === "set" || action.kind === "toggle";
+                const snapshot = momentary ? undefined : source.snapshotOf(action.binding.state);
 
                 // The unconfirmed check belongs here and not only on feedback:
                 // the failure being detected is a *control* that looks live and
                 // does nothing, and for a momentary trigger the action state is
                 // the only thing a panel has to look at.
+                // Read from the binding, not from `snapshot`, so a momentary
+                // trigger still reports an unconfirmed write. That is the whole
+                // point of marking the action state: a button has no feedback,
+                // so it is the only thing a panel can look at.
                 const unconfirmed = source.unconfirmed(action.binding.state);
                 allHealthy &&= !unconfirmed;
 
@@ -212,7 +238,7 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
                     ack: true,
                     q: unconfirmed
                         ? QUALITY.generalDeviceProblem
-                        : snapshot
+                        : momentary || snapshot
                           ? QUALITY.good
                           : QUALITY.generalInstanceProblem,
                 });
@@ -469,18 +495,22 @@ export function sceneObjectsFor(scenes: ReadonlyArray<Scene>): ReadonlyArray<Pub
 
     const objects: PublishedObject[] = [{ id: SCENES, type: "folder", common: { name: "Scenes" } }];
     const emitted = new Set<string>([SCENES]);
+    // Same prefix collision as `objectsFor`: `show` beside `show.start` would
+    // publish `scenes.show` as both a channel and a folder.
+    const declared = new Set(scenes.map(scene => `${SCENES}.${scene.id}`));
 
     for (const scene of scenes) {
         const segments = scene.id.split(".");
         segments.slice(0, -1).forEach((_, index) => {
             const id = `${SCENES}.${segments.slice(0, index + 1).join(".")}`;
-            if (!emitted.has(id)) {
+            if (!emitted.has(id) && !declared.has(id)) {
                 emitted.add(id);
                 objects.push({ id, type: "folder", common: { name: segments[index]! } });
             }
         });
 
         const base = `${SCENES}.${scene.id}`;
+        emitted.add(base);
         objects.push({ id: base, type: "channel", common: { name: scene.name || scene.id } });
         objects.push({
             id: `${base}.run`,

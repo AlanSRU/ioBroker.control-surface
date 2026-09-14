@@ -7,12 +7,108 @@ protocol answers.
 
 **Status: Phase 1 is built.** Registry, resolver, action engine, feedback
 engine, sequence engine and state publisher all exist and are tested with no
-ioBroker anywhere near them; the adapter applies them. It has not yet been run
-against live equipment and the admin UI is JSON rather than a builder. See
+ioBroker anywhere near them; the adapter applies them. It has been run against
+live equipment — a Samsung display and a Blackmagic ATEM — and the admin UI is
+JSON rather than a builder. See
 [`docs/architecture/model.md`](docs/architecture/model.md).
 
-The name is free on npm and absent from the ioBroker adapter catalogue as of
-2026-09-11. Worth re-checking before anything is published.
+## Installation
+
+Install from the ioBroker admin adapter list, then create an instance. The
+adapter has no device connection of its own: it reads and writes states that
+other adapters already own, so those adapters should be configured and running
+first.
+
+## Configuration
+
+Three JSON documents, entered in the instance settings. There is no builder UI
+yet, and this is the interim authoring path.
+
+**Resources** declare what exists and which states may be touched. Nothing
+outside this list is ever read or written — the declaration *is* the
+authorization boundary.
+
+```json
+[
+  {
+    "id": "display.lobby",
+    "type": "display",
+    "name": "Lobby Display",
+    "owner": "iiyama-prolite.0",
+    "capabilities": [
+      {
+        "id": "power",
+        "actions": [
+          { "kind": "set", "id": "on", "binding": { "state": "iiyama-prolite.0.power" }, "value": true },
+          { "kind": "toggle", "id": "toggle", "binding": { "state": "iiyama-prolite.0.power" } }
+        ],
+        "feedback": [
+          { "id": "power", "binding": { "state": "iiyama-prolite.0.power" }, "presentation": "boolean" }
+        ]
+      }
+    ]
+  }
+]
+```
+
+An action's `kind` is one of `set`, `toggle`, `level`, `select` or `route`; a
+`level` needs numeric `min` and `max`. A feedback's `presentation` is one of
+`boolean`, `number`, `text` or `selection`. A binding may carry a `values`
+block describing how semantic values map to device values — `objectStates` to
+read the device's own `common.states`, `table` for an explicit list,
+`resourceIds` to offer the members of a collection, or `jsonList` to read a
+list out of a `role: "json"` state.
+
+**Collections** are lists whose members only exist at runtime, such as ATEM
+inputs or Blustream transmitters:
+
+```json
+[
+  {
+    "id": "atem.sources",
+    "type": "source",
+    "owner": "blackmagic-atem.0",
+    "members": "blackmagic-atem.0.inputs.input*",
+    "valueState": "inputId",
+    "nameState": "longName"
+  }
+]
+```
+
+**Scenes** are sequences of actions, delays and waits:
+
+```json
+[
+  {
+    "id": "presentation.start",
+    "name": "Start Presentation",
+    "onFailure": { "kind": "abort" },
+    "steps": [
+      { "kind": "do", "invoke": { "resource": "display.lobby", "capability": "power", "action": "on" } },
+      { "kind": "waitFor", "resource": "display.lobby", "capability": "power",
+        "feedback": "power", "equals": true, "timeoutMs": 10000 },
+      { "kind": "delay", "ms": 500 }
+    ]
+  }
+]
+```
+
+Every declaration is validated on start. Anything rejected is logged with a
+reason and skipped; the rest still runs, so one bad entry never takes the
+others down with it.
+
+## Usage
+
+Each resource becomes a branch of an ordinary ioBroker state tree under
+`control-surface.0.resources.*`, and each scene gets a `run` button and a
+`status` state under `control-surface.0.scenes.*`. Anything that can read and
+write ioBroker states — vis, Blockly, Node-RED, a script, a panel — drives it
+with no further integration. Writing to an action state performs it; the
+feedback states report what the equipment is actually doing, and say when a
+reading should not be trusted.
+
+This layer never decides *when* anything runs. ioBroker already has schedules,
+scripts and Blockly for that.
 
 ## What exists
 
@@ -21,7 +117,7 @@ The name is free on npm and absent from the ioBroker adapter catalogue as of
 | [`src/model.ts`](src/model.ts) | The interfaces: Resource, Capability, Action, Feedback, Scene. |
 | [`src/mapping.ts`](src/mapping.ts) | Real adapters expressed against those interfaces — the stress test. |
 | [`src/engine/registry.ts`](src/engine/registry.ts) | The declared resources, and the only states this layer may touch. |
-| [`src/engine/resolver.ts`](src/engine/resolver.ts) | Semantic values ↔ device values, for all three `ValueSpace` forms. |
+| [`src/engine/resolver.ts`](src/engine/resolver.ts) | Semantic values ↔ device values, for all four `ValueSpace` forms. |
 | [`src/engine/actions.ts`](src/engine/actions.ts) | An invocation becomes the writes that carry it out, or a typed refusal. |
 | [`src/engine/feedback.ts`](src/engine/feedback.ts) | The read direction, and why a reading should or should not be trusted. |
 | [`src/engine/scenes.ts`](src/engine/scenes.ts) | Scene validation: the faults findable before a device is touched. |
@@ -38,7 +134,7 @@ whose input ids are zero-padded strings.
 
 Mapped so far: Blackmagic ATEM, Blustream ACM, Blustream MFP, Atlona SW510W,
 iiyama ProLite, a Sky box, a Stream Deck and a Samsung TV through two different
-adapters — eleven resources and two collections across seven adapter instances,
+adapters — twelve resources and two collections across nine adapter instances,
 86 bindings. Every state id was read out of adapter
 source, and the versions are pinned in `src/mapping.ts`.
 

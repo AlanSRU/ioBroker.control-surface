@@ -331,3 +331,25 @@ it("a retry delay a timer would reject is a load fault", () => {
     assert.equal(reasons.length, 1);
     assert.match(reasons[0]!, /retries after a delay that/);
 });
+
+it("a malformed scene is dropped without taking the others down", () => {
+    // Every one of these threw a TypeError out of SceneBook.load, and the
+    // adapter's blanket catch then discarded the resources as well — so one
+    // missing "steps": [] took every control in the venue with it.
+    const bad: ReadonlyArray<[string, unknown]> = [
+        ["null", null],
+        ["no steps", { id: "s", name: "s" }],
+        ["a step with no kind", { id: "s", name: "s", steps: [{}] }],
+        ["a do with no invoke", { id: "s", name: "s", steps: [{ kind: "do" }] }],
+        ["a do with no action", { id: "s", name: "s", steps: [{ kind: "do", invoke: { resource: "r" } }] }],
+        ["a parallel with no steps", { id: "s", name: "s", steps: [{ kind: "parallel" }] }],
+        ["an unknown kind", { id: "s", name: "s", steps: [{ kind: "summon" }] }],
+    ];
+
+    for (const [what, scene] of bad) {
+        const good = sceneOf("keeps.working");
+        const { book, problems } = SceneBook.load([scene as Scene, good], registry);
+        assert.equal(problems.length, 1, `expected ${what} to be reported`);
+        assert.ok(book.get("keeps.working"), `expected ${what} not to take the other scene down`);
+    }
+});

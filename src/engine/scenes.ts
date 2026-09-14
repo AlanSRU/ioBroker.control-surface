@@ -49,6 +49,11 @@ export class SceneBook {
         const byId = new Map<string, Scene>();
 
         for (const scene of scenes) {
+            const shape = sceneShapeProblem(scene);
+            if (shape) {
+                problems.push({ where: "scene", reason: shape });
+                continue;
+            }
             // Scenes publish as `scenes.<id>`, so they inherit the object-id
             // rules resources already follow.
             const bad = idProblem(scene.id);
@@ -193,6 +198,95 @@ function stepProblems(
     });
 
     return faults;
+}
+
+/**
+ * Whether a declaration is an object at all.
+ *
+ * @param value - Anything that arrived from the configuration
+ * @returns True when it can be indexed safely
+ */
+function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+/**
+ * Checks a scene has the shape its type claims, before anything walks it.
+ *
+ * The same reasoning as `shapeProblem` in the registry, and the same textarea:
+ * a scene with no `steps`, a `parallel` with no nested `steps`, a `do` with no
+ * `invoke` and a null entry in the array all threw a `TypeError` out of
+ * `SceneBook.load`. One malformed scene must cost that scene and nothing else.
+ *
+ * @param scene - The declared scene, as it came from the configuration
+ * @returns Why it cannot be read, or null
+ */
+function sceneShapeProblem(scene: unknown): string | null {
+    if (!isObject(scene)) {
+        return "is not an object";
+    }
+    if (typeof scene.id !== "string") {
+        return "has no id";
+    }
+    if (!Array.isArray(scene.steps)) {
+        return `"${scene.id}" has no steps array`;
+    }
+    return stepShapeProblem(scene.steps, `"${scene.id}"`);
+}
+
+/**
+ * Checks a list of steps, and any steps nested inside them.
+ *
+ * @param steps - The declared steps
+ * @param where - The scene, for the message
+ * @returns Why they cannot be read, or null
+ */
+function stepShapeProblem(steps: ReadonlyArray<unknown>, where: string): string | null {
+    for (const [index, step] of steps.entries()) {
+        const at = `${where} step ${index + 1}`;
+        if (!isObject(step) || typeof step.kind !== "string") {
+            return `${at} is not an object with a kind`;
+        }
+        switch (step.kind) {
+            case "do":
+                if (!isObject(step.invoke)) {
+                    return `${at} is a "do" with no invoke`;
+                }
+                for (const key of ["resource", "capability", "action"] as const) {
+                    if (typeof step.invoke[key] !== "string") {
+                        return `${at} invokes with no ${key}`;
+                    }
+                }
+                break;
+            case "waitFor":
+                for (const key of ["resource", "capability", "feedback"] as const) {
+                    if (typeof step[key] !== "string") {
+                        return `${at} is a "waitFor" with no ${key}`;
+                    }
+                }
+                break;
+            case "scene":
+                if (typeof step.scene !== "string") {
+                    return `${at} is a "scene" step naming no scene`;
+                }
+                break;
+            case "parallel": {
+                if (!Array.isArray(step.steps)) {
+                    return `${at} is a "parallel" with no steps array`;
+                }
+                const nested = stepShapeProblem(step.steps, at);
+                if (nested) {
+                    return nested;
+                }
+                break;
+            }
+            case "delay":
+                break;
+            default:
+                return `${at} has unknown kind "${step.kind}"`;
+        }
+    }
+    return null;
 }
 
 /**

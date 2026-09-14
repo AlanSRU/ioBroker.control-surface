@@ -127,20 +127,31 @@ class ControlSurface extends utils.Adapter {
         const resources = this.parseConfig<Resource>("resources");
         const collections = this.parseConfig<ResourceCollection>("collections");
 
-        // `Registry.load` and `SceneBook.load` report a malformed declaration
-        // rather than throwing on one, so this catches only a fault they did not
-        // anticipate. It is here because the cost of being wrong is specific and
-        // bad: a throw out of `onReady` is a restart, with the same
-        // configuration, which is a loop that ends when someone finds the
-        // textarea. Starting with nothing declared at least keeps the instance
-        // up and the reason in the log.
+        // Caught separately, not together. Both loaders report a malformed
+        // declaration rather than throwing on one, so these catch only a fault
+        // they did not anticipate — but a single `try` around both meant one
+        // unreadable scene emptied the registry as well, so every control in the
+        // venue went dead over a missing `"steps": []`. A scene fault must cost
+        // the scenes and nothing else.
+        //
+        // The catch is here at all because the cost of being wrong is specific:
+        // a throw out of `onReady` is a restart, with the same configuration,
+        // which is a loop that ends when someone finds the textarea.
         try {
             const loaded = Registry.load(resources, collections);
             this.registry = loaded.registry;
             for (const problem of loaded.problems) {
                 this.log.warn(`${problem.where}: ${problem.reason}`);
             }
+        } catch (error) {
+            this.log.error(
+                `Could not read the configured resources (${(error as Error).message}); ` +
+                    `continuing with none declared. Fix them in the instance configuration.`,
+            );
+            this.registry = Registry.load([], []).registry;
+        }
 
+        try {
             const scenes = SceneBook.load(this.parseConfig<Scene>("scenes"), this.registry);
             this.scenes = scenes.book;
             for (const problem of scenes.problems) {
@@ -148,10 +159,9 @@ class ControlSurface extends utils.Adapter {
             }
         } catch (error) {
             this.log.error(
-                `Could not read the configured declarations (${(error as Error).message}); ` +
-                    `starting with none. Fix them in the instance configuration.`,
+                `Could not read the configured scenes (${(error as Error).message}); ` +
+                    `continuing with none. The resources above are unaffected.`,
             );
-            this.registry = Registry.load([], []).registry;
             this.scenes = SceneBook.load([], this.registry).book;
         }
 
@@ -418,11 +428,21 @@ class ControlSurface extends utils.Adapter {
         }
 
         // Seed each status once. Written only if absent, so a restart does not
-        // wipe the record of what happened before it.
+        // wipe the record of what happened before it — with one exception.
+        //
+        // A scene interrupted by a restart never reaches its own `setStatus`, so
+        // it would report `running` forever: the in-memory guard is gone and the
+        // scene can be fired again, but every panel and script reading the
+        // status believes it is still going. Nothing can be running at startup,
+        // by definition, so that reading is corrected rather than preserved.
         for (const scene of this.scenes.all()) {
             const id = `${SCENES}.${scene.id}.status`;
-            if (!(await this.getStateAsync(id))) {
+            const current = await this.getStateAsync(id);
+            if (!current) {
                 await this.setStatus(scene.id, "idle");
+            } else if (current.val === "running") {
+                this.log.info(`Scene "${scene.id}" was interrupted by a restart; its status was left at running`);
+                await this.setStatus(scene.id, "failed");
             }
         }
     }
@@ -595,7 +615,7 @@ class ControlSurface extends utils.Adapter {
             const withinMs = this.writeWindows.get(write.state);
             if (withinMs !== undefined) {
                 this.writes.arm(write.state, Date.now(), withinMs);
-                this.scheduleConfirmCheck(withinMs);
+                this.scheduleConfirmCheck();
             }
 
             await this.setForeignStateAsync(write.state, { val: write.value, ack: write.ack });
@@ -609,22 +629,44 @@ class ControlSurface extends utils.Adapter {
      * nothing else would ever wake the adapter to notice — which is precisely
      * the failure being detected.
      *
-     * @param withinMs - The window that was just armed
+     * Armed for the *earliest* pending deadline and re-armed after each firing,
+     * rather than for whichever write happened to be last. One timer serving
+     * several windows otherwise loses the longer ones: with the shipped
+     * mapping's 2000ms ATEM and 1500ms TV windows, routing the mixer and then
+     * pressing TV power replaced the timer with the shorter one, which fired
+     * while the ATEM write was still in time, found nothing overdue and cleared
+     * itself — so the longer deadline was never examined. The detector whose
+     * whole purpose is to catch a write that produces no state change cannot
+     * rely on some other state changing to wake it.
      */
-    private scheduleConfirmCheck(withinMs: number): void {
+    private scheduleConfirmCheck(): void {
         if (this.confirmTimer) {
             this.clearTimeout(this.confirmTimer);
-        }
-        this.confirmTimer = this.setTimeout(() => {
             this.confirmTimer = undefined;
-            const lapsed = this.writes.lapsed(Date.now());
-            for (const state of lapsed) {
-                this.log.warn(`Write to ${state} was accepted but never echoed back`);
-            }
-            if (lapsed.length > 0) {
-                void this.publish();
-            }
-        }, withinMs + 100);
+        }
+        const deadline = this.writes.nextDeadline();
+        if (deadline === undefined) {
+            return;
+        }
+
+        this.confirmTimer = this.setTimeout(
+            () => {
+                this.confirmTimer = undefined;
+                const lapsed = this.writes.lapsed(Date.now());
+                for (const state of lapsed) {
+                    this.log.warn(`Write to ${state} was accepted but never echoed back`);
+                }
+                if (lapsed.length > 0) {
+                    void this.publish();
+                }
+                // Ask again: a longer window may still be outstanding, and nothing
+                // else is going to wake us for it.
+                this.scheduleConfirmCheck();
+                // Clamped as well as validated at load, because this throw would
+                // happen before the write rather than after it.
+            },
+            clampDelay(Math.max(0, deadline - Date.now()) + 100),
+        );
     }
 
     /**

@@ -73,6 +73,31 @@ export class WriteLog {
         return [...this.pending].filter(([, deadline]) => now >= deadline).map(([state]) => state);
     }
 
+    /**
+     * When the earliest pending write falls due.
+     *
+     * The adapter arms one timer, so it has to arm it for the *soonest*
+     * deadline and then ask again. Arming for whichever write happened to be
+     * last meant a short window cancelled a longer one: with the shipped
+     * mapping's 2000ms ATEM and 1500ms TV windows, routing the mixer and then
+     * pressing TV power re-armed the timer to fire at 1500ms, found nothing
+     * overdue, and cleared itself — so the ATEM's own deadline was never
+     * examined and the write that vanished was never reported. The detector
+     * whose whole purpose is to catch a write that produces no state change
+     * cannot rely on another state changing to wake it.
+     *
+     * @returns The earliest deadline, or undefined when nothing is pending
+     */
+    nextDeadline(): number | undefined {
+        let earliest: number | undefined;
+        for (const deadline of this.pending.values()) {
+            if (earliest === undefined || deadline < earliest) {
+                earliest = deadline;
+            }
+        }
+        return earliest;
+    }
+
     /** Forgets everything, for an adapter shutting down. */
     clear(): void {
         this.pending.clear();

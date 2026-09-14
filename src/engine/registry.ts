@@ -50,6 +50,20 @@ const VALID_SEMANTIC_ID = /^[._\-/:!#$%&()+=@^{}|~\p{Ll}\p{Lu}\p{Nd}]+$/u;
 /** Published as `resources.<id>.healthy`, so no capability may take the name. */
 export const RESERVED_CAPABILITY = "healthy";
 
+/**
+ * The action kinds the engine can dispatch on.
+ *
+ * Closed, unlike capability and resource *type* ids, which are deliberately an
+ * open vocabulary. A kind is not a label: every switch in the action engine and
+ * the publisher dispatches on it, so one the code does not know is not an
+ * extension point, it is a state that never gets created and a write that
+ * throws.
+ */
+const ACTION_KINDS = new Set(["set", "toggle", "level", "select", "route"]);
+
+/** The presentations the publisher knows how to type and give a role to. */
+const PRESENTATIONS = new Set(["boolean", "number", "text", "selection"]);
+
 /** Rejects `a..b`, a leading `.` and a trailing `.`, which make empty segments. */
 const EMPTY_SEGMENT = /(^\.)|(\.\.)|(\.$)/;
 
@@ -358,15 +372,27 @@ function validateCapabilities(
         // Capability, action and feedback ids become single path segments under
         // the resource, so a dot in one would silently create a tree level and
         // make the published id ambiguous to split back apart.
+        //
+        // The charset matters here for exactly the reason it matters on a
+        // resource id, and checking only the dot was not enough: these are
+        // published segments too, so a capability called `音量` or an action
+        // called `pre'set` is rewritten by `fixForbiddenCharsInId` on the way
+        // into `extendObject` while `writeTargets()` keeps the id as declared —
+        // and the control is silently dead. Any script outside the controller's
+        // allowlist does it, not just punctuation.
         const named = [
             ...capability.actions.map(a => ["action", a.id] as const),
             ...capability.feedback.map(f => ["feedback", f.id] as const),
         ];
-        const dotted = [["capability", capability.id] as const, ...named].filter(([, id]) => id.includes("."));
-        for (const [what, id] of dotted) {
-            problems.push({ where, reason: `${what} id "${id}" may not contain a dot` });
+        const segments = [["capability", capability.id] as const, ...named];
+        const badSegments = segments.filter(([, id]) => id.includes(".") || idProblem(id) !== null);
+        for (const [what, id] of badSegments) {
+            problems.push({
+                where,
+                reason: id.includes(".") ? `${what} id "${id}" may not contain a dot` : `${what} id ${idProblem(id)}`,
+            });
         }
-        if (dotted.length > 0) {
+        if (badSegments.length > 0) {
             continue;
         }
 
@@ -391,7 +417,27 @@ function validateCapabilities(
                 problems.push({ where, reason: `duplicate action "${capability.id}.${action.id}"` });
             }
             seenActions.add(action.id);
-            if (action.kind === "level" && action.min >= action.max) {
+            if (!ACTION_KINDS.has(action.kind)) {
+                // An unknown kind falls off the end of every switch that
+                // dispatches on it: the publisher returns undefined for its
+                // `common`, so the object is never created while `statesFor`
+                // writes a value to the id anyway, and invoking it throws.
+                problems.push({
+                    where,
+                    reason: `action "${capability.id}.${action.id}" has unknown kind "${String(action.kind)}"`,
+                });
+            }
+            if (action.kind === "level" && !(typeof action.min === "number" && typeof action.max === "number")) {
+                // Checked by type, not by comparison. `undefined >= undefined`
+                // is false, so a level with no bounds passed the min/max test,
+                // published with no min/max, and then `quantise` returned
+                // `Math.min(undefined, …)` — NaN — which `plan` reported as a
+                // successful write and sent to live equipment as null.
+                problems.push({
+                    where,
+                    reason: `action "${capability.id}.${action.id}" is a level without numeric min and max`,
+                });
+            } else if (action.kind === "level" && action.min >= action.max) {
                 problems.push({
                     where,
                     reason: `action "${capability.id}.${action.id}" has min >= max`,
@@ -406,6 +452,17 @@ function validateCapabilities(
                 problems.push({ where, reason: `duplicate feedback "${capability.id}.${feedback.id}"` });
             }
             seenFeedback.add(feedback.id);
+            if (!PRESENTATIONS.has(feedback.presentation)) {
+                // Without a presentation the publisher has no type and no role
+                // to give the state, so it publishes one with neither — which
+                // js-controller's strict object check rejects on every write.
+                problems.push({
+                    where,
+                    reason:
+                        `feedback "${capability.id}.${feedback.id}" has unknown presentation ` +
+                        `"${String(feedback.presentation)}"`,
+                });
+            }
             problems.push(...bindingProblems(where, `${capability.id}.${feedback.id}`, feedback.binding, collections));
         }
     }
@@ -462,6 +519,19 @@ function bindingProblems(
     }
     if (values?.kind === "table" && (!values.entries || values.entries.length === 0)) {
         problems.push({ where, reason: `"${what}" declares an empty value table` });
+    }
+
+    // The one configured duration that reaches a timer outside a scene.
+    // `scheduleConfirmCheck` passes it to `setTimeout`, whose validator throws
+    // on a non-number — and it throws *before* the write, so a quoted
+    // `"confirmWithinMs": "1500"` means the device is never written at all and
+    // every press of that control only logs a type error.
+    const withinMs = (binding as { readonly confirmWithinMs?: unknown }).confirmWithinMs;
+    if (withinMs !== undefined && (typeof withinMs !== "number" || !Number.isFinite(withinMs) || withinMs < 0)) {
+        problems.push({
+            where,
+            reason: `"${what}" has a confirmWithinMs of ${JSON.stringify(withinMs)}, which is not a duration`,
+        });
     }
 
     return problems;

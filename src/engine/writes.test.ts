@@ -70,3 +70,21 @@ it("writing again restarts the window", () => {
     log.arm("a.0.x", T + 600, 500);
     assert.equal(log.unconfirmed("a.0.x", T + 700), false);
 });
+
+it("the next deadline is the earliest, not the most recent", () => {
+    // One timer serves every window, so it has to be armed for the soonest.
+    // Arming for whichever write was last meant the ATEM's 2000ms window was
+    // cancelled by the TV's 1500ms one, fired early, found nothing overdue and
+    // cleared itself — and the vanished write was never reported.
+    const log = new WriteLog();
+    log.arm("blackmagic-atem.0.me0.programInput", 1000, 2000);
+    log.arm("samsungtv.0.meetingtv.state.power", 1100, 1500);
+
+    assert.equal(log.nextDeadline(), 2600, "the TV's deadline is sooner than the mixer's");
+
+    log.observed("samsungtv.0.meetingtv.state.power", true);
+    assert.equal(log.nextDeadline(), 3000, "the mixer's deadline survives the TV's confirmation");
+
+    log.observed("blackmagic-atem.0.me0.programInput", true);
+    assert.equal(log.nextDeadline(), undefined);
+});
