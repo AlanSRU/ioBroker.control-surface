@@ -1,10 +1,10 @@
 {
-    "control-surface adapter settings": "control-surface的适配器设置",
-    "registryNote": "Resources, collections and scenes are entered as JSON while there is no builder UI. Every declaration is validated on start; anything rejected is logged with a reason and skipped, and the rest still runs.",
-    "resources": "Resources (JSON array)",
-    "resourcesHelp": "Each resource declares an owner adapter instance and its capabilities. The states named here are the only states this adapter will ever touch.",
-    "collections": "Resource collections (JSON array)",
-    "collectionsHelp": "Members discovered at runtime by object pattern, such as Blustream transmitters or ATEM inputs.",
-    "scenes": "Scenes (JSON array)",
-    "scenesHelp": "Sequences of actions, delays and waits. Validated on start: unknown actions, unknown scenes and scene cycles are rejected before anything runs."
+    "control-surface adapter settings": "control-surface 适配器设置",
+    "registryNote": "在没有可视化编辑界面之前，资源、集合和场景以 JSON 形式录入。每条声明都会在启动时校验；被拒绝的会连同原因记入日志并跳过，其余部分继续运行。",
+    "resources": "资源（JSON 数组）",
+    "resourcesHelp": "每个资源声明其所属的适配器实例及其能力。此处列出的状态是本适配器唯一会访问的状态。",
+    "collections": "资源集合（JSON 数组）",
+    "collectionsHelp": "成员在运行时通过对象模式发现，例如 Blustream 发射器或 ATEM 输入。",
+    "scenes": "场景（JSON 数组）",
+    "scenesHelp": "由动作、延时和等待组成的序列。启动时校验：未知动作、未知场景以及场景循环会在任何操作执行前被拒绝。"
 }

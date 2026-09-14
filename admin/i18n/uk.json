@@ -1,10 +1,10 @@
 {
-    "control-surface adapter settings": "Налаштування адаптера для control-surface",
-    "registryNote": "Resources, collections and scenes are entered as JSON while there is no builder UI. Every declaration is validated on start; anything rejected is logged with a reason and skipped, and the rest still runs.",
-    "resources": "Resources (JSON array)",
-    "resourcesHelp": "Each resource declares an owner adapter instance and its capabilities. The states named here are the only states this adapter will ever touch.",
-    "collections": "Resource collections (JSON array)",
-    "collectionsHelp": "Members discovered at runtime by object pattern, such as Blustream transmitters or ATEM inputs.",
-    "scenes": "Scenes (JSON array)",
-    "scenesHelp": "Sequences of actions, delays and waits. Validated on start: unknown actions, unknown scenes and scene cycles are rejected before anything runs."
+    "control-surface adapter settings": "Налаштування адаптера control-surface",
+    "registryNote": "Ресурси, колекції та сцени вводяться у форматі JSON, доки немає візуального редактора. Кожне оголошення перевіряється під час запуску; відхилене записується до журналу із зазначенням причини та пропускається, а решта продовжує працювати.",
+    "resources": "Ресурси (масив JSON)",
+    "resourcesHelp": "Кожен ресурс визначає екземпляр адаптера-власника та свої можливості. Перелічені тут стани — єдині, до яких цей адаптер коли-небудь звертатиметься.",
+    "collections": "Колекції ресурсів (масив JSON)",
+    "collectionsHelp": "Елементи виявляються під час виконання за шаблоном об'єктів, наприклад передавачі Blustream або входи ATEM.",
+    "scenes": "Сцени (масив JSON)",
+    "scenesHelp": "Послідовності дій, затримок і очікувань. Перевіряються під час запуску: невідомі дії, невідомі сцени та цикли сцен відхиляються до того, як щось буде виконано."
 }

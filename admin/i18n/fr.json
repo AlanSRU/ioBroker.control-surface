@@ -1,10 +1,10 @@
 {
-    "control-surface adapter settings": "Paramètres d'adaptateur pour control-surface",
-    "registryNote": "Resources, collections and scenes are entered as JSON while there is no builder UI. Every declaration is validated on start; anything rejected is logged with a reason and skipped, and the rest still runs.",
-    "resources": "Resources (JSON array)",
-    "resourcesHelp": "Each resource declares an owner adapter instance and its capabilities. The states named here are the only states this adapter will ever touch.",
-    "collections": "Resource collections (JSON array)",
-    "collectionsHelp": "Members discovered at runtime by object pattern, such as Blustream transmitters or ATEM inputs.",
-    "scenes": "Scenes (JSON array)",
-    "scenesHelp": "Sequences of actions, delays and waits. Validated on start: unknown actions, unknown scenes and scene cycles are rejected before anything runs."
+    "control-surface adapter settings": "Paramètres de l'adaptateur control-surface",
+    "registryNote": "Les ressources, les collections et les scènes se saisissent en JSON tant qu'il n'existe pas d'interface de création. Chaque déclaration est validée au démarrage ; ce qui est rejeté est journalisé avec son motif puis ignoré, et le reste continue de fonctionner.",
+    "resources": "Ressources (tableau JSON)",
+    "resourcesHelp": "Chaque ressource déclare l'instance d'adaptateur propriétaire et ses capacités. Les états nommés ici sont les seuls auxquels cet adaptateur touchera jamais.",
+    "collections": "Collections de ressources (tableau JSON)",
+    "collectionsHelp": "Membres découverts à l'exécution par motif d'objets, par exemple les émetteurs Blustream ou les entrées ATEM.",
+    "scenes": "Scènes (tableau JSON)",
+    "scenesHelp": "Séquences d'actions, de délais et d'attentes. Validées au démarrage : actions inconnues, scènes inconnues et cycles de scènes sont rejetés avant toute exécution."
 }
