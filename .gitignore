@@ -10,9 +10,11 @@ node_modules
 build/
 
 # Local design notes. docs/architecture/ IS tracked — it is repository
-# documentation per the brief's section 49. Only the private planning
-# brief and the agent notes are held back.
+# documentation per the brief's section 49. Held back: the private planning
+# brief, the agent notes, and the iobroker-react assessment, which describes a
+# named live installation and so does not belong in a public repository.
 docs/brief.md
+docs/architecture/iobroker-react.md
 **/CLAUDE.md
 
 # Logs

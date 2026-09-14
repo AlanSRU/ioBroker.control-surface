@@ -29,7 +29,6 @@ The name is free on npm and absent from the ioBroker adapter catalogue as of
 | [`src/engine/publisher.ts`](src/engine/publisher.ts) | The semantic state tree, as data an adapter can apply. |
 | [`src/main.ts`](src/main.ts) | The adapter: `ObjectSource` and `Effects` over ioBroker, and nothing else. |
 | [`docs/architecture/model.md`](docs/architecture/model.md) | What the mapping proved, what it broke, and the two settled decisions. |
-| [`docs/architecture/iobroker-react.md`](docs/architecture/iobroker-react.md) | The production venue system assessed against the model — crossover, and what this layer would take off it. |
 
 `npm run verify` typechecks everything and runs the tests. The mapping compiles
 only if the model can represent equipment that actually exists, and the engine
@@ -76,8 +75,7 @@ ioBroker objects and does not know what reads them.
   consumer. It is **not** being replaced: it already hand-implements a resource
   registry, a binding resolver and a sequence engine, and this layer would take
   those off it while its venue application — match day, bookings, scheduling,
-  reporting — stays put. Assessed in
-  [`docs/architecture/iobroker-react.md`](docs/architecture/iobroker-react.md).
+  reporting — stays put.
 
 ## What it publishes
 

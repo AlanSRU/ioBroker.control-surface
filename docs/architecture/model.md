@@ -11,9 +11,11 @@ onto them live in [`src/mapping.ts`](../../src/mapping.ts) and are verified by
 This is the brief's sections 46 and 47 carried out: define the interfaces, then
 map the actual equipment onto them before writing any engine.
 
-[`iobroker-react.md`](iobroker-react.md) assesses the production venue system
-against this model — what it already implements by hand, what this layer would
-take off it, and the two findings below that it broke.
+`iobroker-react`, the production venue system this layer sits alongside, was
+separately assessed against this model — what it already implements by hand,
+what this layer would take off it, and the two findings below that it broke.
+That assessment is held locally rather than in the repository, because it
+describes a live installation; the findings it produced are recorded here.
 
 ## Why the mapping is TypeScript and not a table
 
@@ -51,7 +53,7 @@ A display selecting its own input is a one-output matrix. So the model has one
 tidy-up.
 
 **Corrected 2026-09-11: the second half of that claim is wrong.** Reading the
-production system (see [`iobroker-react.md`](iobroker-react.md)) turned up
+production system turned up
 `blustream-acm.0.system.commands.routeAll` / `routeAllVideo` / `routeAllAudio`,
 in the *same adapter version this mapping already pins*. They take a transmitter
 id and route every display at once, and they belong to `system` — to no
