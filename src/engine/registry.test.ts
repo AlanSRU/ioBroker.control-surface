@@ -440,3 +440,52 @@ it("a momentary action may not share an id with a feedback", () => {
     } as unknown as Partial<Resource>);
     assert.deepEqual(Registry.load([readable], []).problems, []);
 });
+
+it("an unknown value space kind is rejected rather than crashing the adapter", () => {
+    // optionsFor switches on this and every case returns, so an unknown kind
+    // fell off the end returning undefined — and every caller reads .ok at
+    // once. On a feedback binding that threw inside the first publish() that
+    // onReady awaits: nothing published, nothing subscribed, and a restart into
+    // the same configuration. Forgetting the word "kind" was enough.
+    for (const values of [
+        { collection: "atem.sources" },
+        { kind: "objectstates" },
+        { kind: "resourceId", collection: "atem.sources" },
+    ]) {
+        const resource = resourceOf({
+            id: "a.b",
+            capabilities: [
+                {
+                    id: "source",
+                    actions: [],
+                    feedback: [{ id: "source", binding: { state: "x.0.y", values }, presentation: "selection" }],
+                },
+            ],
+        } as unknown as Partial<Resource>);
+
+        const { problems } = Registry.load([resource], []);
+        assert.equal(problems.length, 1, `expected ${JSON.stringify(values)} to be rejected`);
+        assert.match(problems[0]!.reason, /unknown value space kind/);
+    }
+});
+
+it("a settleMs that is not a duration is rejected", () => {
+    // `settleMs > 0` is false for "8s", so the load-time impossible-wait check
+    // passed, and `waited - matchedAt >= settleMs` is then a NaN comparison
+    // that is never true: every waitFor on that feedback times out while the
+    // device is answering correctly.
+    const resource = resourceOf({
+        id: "a.b",
+        capabilities: [
+            {
+                id: "power",
+                actions: [],
+                feedback: [{ id: "power", binding: { state: "x.0.y" }, presentation: "boolean", settleMs: "8s" }],
+            },
+        ],
+    } as unknown as Partial<Resource>);
+
+    const { problems } = Registry.load([resource], []);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0]!.reason, /settleMs that/);
+});

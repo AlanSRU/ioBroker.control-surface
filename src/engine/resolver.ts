@@ -82,6 +82,17 @@ export type Unresolved =
     /** The binding names a collection the registry does not hold. */
     | { readonly reason: "unknown-collection"; readonly collection: string }
     /**
+     * The binding declares a value space this resolver does not know.
+     *
+     * `Registry.load` rejects one, so reaching this means a form was added to
+     * the model without being added here. It is a reported refusal rather than
+     * a fall through the end of the switch, because the latter returned
+     * `undefined` to callers that immediately read `.ok` — which threw out of
+     * the first `publish()` that `onReady` awaits, so nothing was published at
+     * all and js-controller restarted into the same configuration.
+     */
+    | { readonly reason: "unknown-value-space"; readonly kind: string }
+    /**
      * The JSON document is missing, empty, unparseable, or its path does not
      * lead to an array.
      *
@@ -158,6 +169,12 @@ export function optionsFor(binding: StateBinding, registry: Registry, source: Ob
             // — cannot arise. "01" parses as the string it is.
             return { ok: true, options: list.map(e => jsonOption(e, space)).filter(o => o !== undefined) };
         }
+
+        default:
+            // Unreachable while the registry and this switch agree. Kept
+            // because the cost of them disagreeing is not a bad menu, it is an
+            // adapter that never starts.
+            return { ok: false, reason: "unknown-value-space", kind: String((space as { kind: unknown }).kind) };
     }
 }
 

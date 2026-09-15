@@ -18,7 +18,7 @@
 
 import type { FailurePolicy, Scene, SequenceStep } from "../model";
 import type { Registry, RegistryProblem } from "./registry";
-import { idProblem } from "./registry";
+import { durationProblem, idProblem } from "./registry";
 
 export interface SceneLoad {
     readonly book: SceneBook;
@@ -326,42 +326,6 @@ function stepShapeProblem(steps: ReadonlyArray<unknown>, where: string): string 
             default:
                 return `${at} has unknown kind "${step.kind}"`;
         }
-    }
-    return null;
-}
-
-/**
- * The largest value `setTimeout` accepts. Above it, ioBroker's `Validator`
- * throws rather than clamping, which takes the whole instance down.
- */
-const MAX_TIMER_MS = 2_147_483_647;
-
-/**
- * Checks a configured duration is one a timer will actually accept.
- *
- * Every duration in a scene reaches `this.setTimeout`, whose `Validator` throws
- * on a non-number and on anything outside `0 .. 2147483647`. Thrown from inside
- * a running scene that rejection is unhandled, so the instance is terminated
- * part-way through — equipment left half-configured, and the scene's status
- * state frozen at `running`. The classic trigger is not an exotic number but a
- * quoted one: `"ms": "5000"` is valid JSON, reads correctly to a person, and is
- * a string.
- *
- * Checked at load with the other decidable faults, because a duration cannot
- * become valid later.
- *
- * @param ms - The configured duration
- * @returns What is wrong with it, as a sentence fragment, or null
- */
-function durationProblem(ms: unknown): string | null {
-    if (typeof ms !== "number" || !Number.isFinite(ms)) {
-        return `is ${JSON.stringify(ms)}, which is not a number`;
-    }
-    if (ms < 0) {
-        return `is negative (${ms}ms)`;
-    }
-    if (ms > MAX_TIMER_MS) {
-        return `is ${ms}ms, beyond the ${MAX_TIMER_MS}ms a timer accepts`;
     }
     return null;
 }

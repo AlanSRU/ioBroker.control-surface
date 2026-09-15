@@ -67,6 +67,9 @@ const PRESENTATIONS = new Set(["boolean", "number", "text", "selection"]);
 /** What a device state can hold, so what a declared `set` value may be. */
 const SCALARS = new Set(["boolean", "number", "string"]);
 
+/** The value spaces `optionsFor` knows how to resolve. */
+const VALUE_SPACE_KINDS = new Set(["identity", "table", "objectStates", "resourceIds", "jsonList"]);
+
 /** Rejects `a..b`, a leading `.` and a trailing `.`, which make empty segments. */
 const EMPTY_SEGMENT = /(^\.)|(\.\.)|(\.$)/;
 
@@ -154,6 +157,45 @@ function shapeProblem(resource: unknown): string | null {
         }
     }
 
+    return null;
+}
+
+/**
+ * The largest value `setTimeout` accepts. Above it, ioBroker's `Validator`
+ * throws rather than clamping, which takes the whole instance down.
+ */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * Checks a configured duration is one a timer will actually accept.
+ *
+ * Every duration in a scene reaches `this.setTimeout`, whose `Validator` throws
+ * on a non-number and on anything outside `0 .. 2147483647`. Thrown from inside
+ * a running scene that rejection is unhandled, so the instance is terminated
+ * part-way through — equipment left half-configured, and the scene's status
+ * state frozen at `running`. The classic trigger is not an exotic number but a
+ * quoted one: `"ms": "5000"` is valid JSON, reads correctly to a person, and is
+ * a string.
+ *
+ * Checked at load with the other decidable faults, because a duration cannot
+ * become valid later. Lives here rather than in `scenes.ts` because scene
+ * durations are not the only ones: `confirmWithinMs` and `settleMs` are
+ * declared on bindings and feedback, and a second copy of this rule is how
+ * the next duration gets missed.
+ *
+ * @param ms - The configured duration
+ * @returns What is wrong with it, as a sentence fragment, or null
+ */
+export function durationProblem(ms: unknown): string | null {
+    if (typeof ms !== "number" || !Number.isFinite(ms)) {
+        return `is ${JSON.stringify(ms)}, which is not a number`;
+    }
+    if (ms < 0) {
+        return `is negative (${ms}ms)`;
+    }
+    if (ms > MAX_TIMER_MS) {
+        return `is ${ms}ms, beyond the ${MAX_TIMER_MS}ms a timer accepts`;
+    }
     return null;
 }
 
@@ -494,6 +536,24 @@ function validateCapabilities(
                 problems.push({ where, reason: `duplicate feedback "${capability.id}.${feedback.id}"` });
             }
             seenFeedback.add(feedback.id);
+            if (feedback.settleMs !== undefined) {
+                // The last configured duration to be left unchecked, and it
+                // fails in the quietest way of all: `settleMs > 0` is false for
+                // a non-numeric string, so the load-time impossible-wait check
+                // passes, and at runtime `waited - matchedAt >= settleMs` is a
+                // NaN comparison that is never true. Every waitFor on that
+                // feedback then times out while the device is answering
+                // correctly, and the scene aborts mid-show telling the operator
+                // the opposite of what happened. A unit suffix does it —
+                // "8s" rather than 8000.
+                const bad = durationProblem(feedback.settleMs);
+                if (bad) {
+                    problems.push({
+                        where,
+                        reason: `feedback "${capability.id}.${feedback.id}" has a settleMs that ${bad}`,
+                    });
+                }
+            }
             if (!PRESENTATIONS.has(feedback.presentation)) {
                 // Without a presentation the publisher has no type and no role
                 // to give the state, so it publishes one with neither — which
@@ -535,6 +595,21 @@ function bindingProblems(
     // This catches a semantic id written where a device id belongs.
     if (!binding.state.includes(".")) {
         problems.push({ where, reason: `"${what}" binds to "${binding.state}", which is not a full state id` });
+    }
+
+    const valueKind = (binding.values as { readonly kind?: unknown } | undefined)?.kind;
+    if (binding.values !== undefined && !VALUE_SPACE_KINDS.has(String(valueKind))) {
+        // The last closed vocabulary left unchecked. `optionsFor` switches on
+        // this and every case returns, so an unknown discriminant fell off the
+        // end returning undefined — and every caller reads `.ok` straight away.
+        // On a feedback binding that throws inside the first `publish()` that
+        // `onReady` awaits, so nothing is published, nothing is subscribed,
+        // info.connection stays false and js-controller restarts into the same
+        // configuration: the restart loop, reached by forgetting one word.
+        problems.push({
+            where,
+            reason: `"${what}" has unknown value space kind ${JSON.stringify(valueKind)}`,
+        });
     }
 
     const values = binding.values as
