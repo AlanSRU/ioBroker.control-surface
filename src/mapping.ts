@@ -861,14 +861,31 @@ export const samsungTv: Resource = {
         },
         {
             id: "source",
-            // A display choosing its own input is a one-output matrix, so these
-            // are `route` — but each input is its own button rather than a value
-            // written to one state, which no other mapped device does.
+            // Declared `set`, not `route`, and that is a finding about the model
+            // rather than a tidy-up.
+            //
+            // `route` means *write a source identifier into a state*, which is
+            // what every other mapped router does. The tizen proxy has no such
+            // state: each input is a separate momentary key, published
+            // `type: 'boolean', role: 'button'` (its `main.js`, around line
+            // 100). Declaring these as `route` made the publisher collapse the
+            // boolean to `type: "string"` — `spaceOf` admits only string and
+            // number — and then publish the device's boolean into it, so
+            // js-controller logged a type complaint on every publish cycle and
+            // the control rendered as a free-text field.
+            //
+            // So the model cannot express "one button per source" as routing,
+            // and this is the honest declaration of what these are: momentary
+            // key presses, exactly like the volume keys below. What is lost is
+            // the *semantics* — nothing now says these four select a source —
+            // and closing that would need a way for several actions to share one
+            // logical value space. Recorded rather than built; nothing else in
+            // the mapping has this shape.
             actions: [
-                { kind: "route", id: "hdmi1", binding: { state: "samsung_tizen.0.control.KEY_HDMI1" }, layer: "all" },
-                { kind: "route", id: "hdmi2", binding: { state: "samsung_tizen.0.control.KEY_HDMI2" }, layer: "all" },
-                { kind: "route", id: "hdmi3", binding: { state: "samsung_tizen.0.control.KEY_HDMI3" }, layer: "all" },
-                { kind: "route", id: "hdmi4", binding: { state: "samsung_tizen.0.control.KEY_HDMI4" }, layer: "all" },
+                { kind: "set", id: "hdmi1", binding: { state: "samsung_tizen.0.control.KEY_HDMI1" }, value: true },
+                { kind: "set", id: "hdmi2", binding: { state: "samsung_tizen.0.control.KEY_HDMI2" }, value: true },
+                { kind: "set", id: "hdmi3", binding: { state: "samsung_tizen.0.control.KEY_HDMI3" }, value: true },
+                { kind: "set", id: "hdmi4", binding: { state: "samsung_tizen.0.control.KEY_HDMI4" }, value: true },
             ],
             feedback: [],
         },

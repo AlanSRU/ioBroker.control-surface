@@ -105,8 +105,11 @@ it("read-only feedback never uses a writable role", () => {
 });
 
 it("only roles ioBroker actually defines are published", () => {
-    // E1008 rejects invented roles.
-    const allowed = new Set(["button", "level", "text", "value", "indicator"]);
+    // E1008 rejects invented roles. `switch` joined the set when the publisher
+    // stopped collapsing a boolean binding to a string: a readable, writable
+    // boolean is what `switch` means, and the alternative was publishing a type
+    // the device does not have.
+    const allowed = new Set(["button", "level", "text", "value", "indicator", "switch"]);
     for (const object of objectsFor(registry, acmTree)) {
         if (object.type === "state") {
             assert.ok(allowed.has(object.common.role!), `${object.id} publishes role "${object.common.role}"`);
@@ -397,4 +400,60 @@ it("no published state is a write-only level", () => {
             assert.equal(common.type, "number", `${object.id} is a non-numeric level`);
         }
     }
+});
+
+it("a merged action and feedback reports the feedback's health, not just the action's", () => {
+    // A same-named action and feedback publish as one read/write state, and the
+    // feedback branch skips it to avoid emitting it twice — so its reading has
+    // to be taken in the action branch or it is never taken at all. It was not,
+    // so a stale route published as good quality with healthy true while the
+    // owning adapter was down.
+    const offline = treeOf({
+        values: {
+            "blustream-acm.0.info.connection": false,
+            "blustream-acm.0.receivers.rx3.videoRoute": "007",
+            "blustream-acm.0.transmitters.007.id": "007",
+            "blustream-acm.0.transmitters.007.name": "Laptop",
+        },
+        members: { "blustream-acm.0.transmitters.*": ["blustream-acm.0.transmitters.007"] },
+    });
+
+    const states = statesFor(registry, offline);
+    const route = states.find(s => s.id === `${ROOT}.display.stage.routing.video`);
+    assert.equal(route?.q, 0x12, "an offline owner is instance-not-connected, not good");
+
+    const healthy = states.find(s => s.id === `${ROOT}.display.stage.healthy`);
+    assert.equal(healthy?.val, false, "a resource whose owner is down is not healthy");
+});
+
+it("a boolean binding keeps its declared type rather than collapsing to string", () => {
+    // Publishing type "string" over a boolean state made js-controller complain
+    // on every publish and rendered a button as a free-text field.
+    const tree = treeOf({
+        meta: { "samsung_tizen.0.control.KEY_HDMI1": { type: "boolean" } },
+        values: { "samsung_tizen.0.control.KEY_HDMI1": true },
+    });
+    const { registry: local } = Registry.load(
+        [
+            {
+                id: "display.test",
+                type: "display",
+                owner: "samsung_tizen.0",
+                capabilities: [
+                    {
+                        id: "source",
+                        actions: [
+                            { kind: "select", id: "hdmi1", binding: { state: "samsung_tizen.0.control.KEY_HDMI1" } },
+                        ],
+                        feedback: [],
+                    },
+                ],
+            },
+        ],
+        [],
+    );
+
+    const common = objectsFor(local, tree).find(o => o.id === `${ROOT}.display.test.source.hdmi1`)!.common;
+    assert.equal(common.type, "boolean");
+    assert.equal(common.role, "switch", "a readable, writable boolean is a switch");
 });

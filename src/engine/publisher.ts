@@ -232,15 +232,36 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
                 const unconfirmed = source.unconfirmed(action.binding.state);
                 allHealthy &&= !unconfirmed;
 
+                // A feedback sharing this action's id publishes as one
+                // read/write state, and the feedback branch below skips it to
+                // avoid emitting it twice — so its reading has to be taken
+                // here, or it is never taken at all. It was not: the merged
+                // state's quality came from this branch alone, which knows only
+                // about unconfirmed writes and nothing about an offline owner,
+                // a value that never reported, or an unacknowledged one. A
+                // routing control declared the natural way — one `route` plus a
+                // same-named feedback on the same state, which the mapping
+                // itself does for `display.stage.routing.video` — therefore
+                // published a stale route as good quality with `healthy` true
+                // while its adapter was down, which is precisely the "control
+                // that looks live" failure the feedback engine exists to stop.
+                const merged = capability.feedback.find(f => f.id === action.id);
+                const reading = merged ? read(resource.id, capability.id, merged.id, registry, source) : undefined;
+                if (merged) {
+                    allHealthy &&= reading?.healthy ?? false;
+                }
+
                 states.push({
                     id: `${base}.${capability.id}.${action.id}`,
-                    val: snapshot?.val ?? null,
+                    val: merged ? (reading?.raw ?? null) : (snapshot?.val ?? null),
                     ack: true,
                     q: unconfirmed
                         ? QUALITY.generalDeviceProblem
-                        : momentary || snapshot
-                          ? QUALITY.good
-                          : QUALITY.generalInstanceProblem,
+                        : merged
+                          ? qualityOf(reading?.healthy === true ? undefined : reading?.unhealthy)
+                          : momentary || snapshot
+                            ? QUALITY.good
+                            : QUALITY.generalInstanceProblem,
                 });
             }
 
@@ -359,8 +380,9 @@ function actionCommon(action: ActionDef, registry: Registry, source: ObjectSourc
             return {
                 name,
                 type: space.type,
-                // A writable number is `level`; a writable string is `text`.
-                role: space.type === "number" ? "level" : "text",
+                // A writable number is `level`, a writable boolean is `switch`,
+                // a writable string is `text`.
+                role: space.type === "number" ? "level" : space.type === "boolean" ? "switch" : "text",
                 // Always readable, whatever the sibling feedback is called.
                 // A write-only `level` is repochecker's E1010, and the
                 // declaration would be a lie either way: `statesFor` writes the
@@ -400,9 +422,10 @@ function presentationCommon(
         case "selection": {
             const space = spaceOf(binding, registry, source);
             return {
-                // A read-only number is `value`; `level` would fail E1010.
+                // A read-only number is `value`; `level` would fail E1010. A
+                // read-only boolean is `indicator`, for the same reason.
                 type: space.type,
-                role: space.type === "number" ? "value" : "text",
+                role: space.type === "number" ? "value" : space.type === "boolean" ? "indicator" : "text",
                 ...(space.states ? { states: space.states } : {}),
             };
         }
@@ -433,9 +456,16 @@ function spaceOf(
     binding: Parameters<typeof optionsFor>[0],
     registry: Registry,
     source: ObjectSource,
-): { type: "string" | "number"; states?: Readonly<Record<string, string>> } {
+): { type: "string" | "number" | "boolean"; states?: Readonly<Record<string, string>> } {
     const declared = source.metaOf(binding.state)?.type;
-    const fallback = declared === "number" ? "number" : "string";
+    // Boolean is carried rather than collapsed into "string". Admitting only
+    // two types meant a selection bound to a boolean state published
+    // `type: "string"` and then had the device's `true` written into it, so
+    // js-controller complained on every publish and the control rendered as a
+    // free-text box over a button. That is the project's own rule — wherever a
+    // device value meets a type decision, the declared type decides — reached
+    // by a third entrance, after the resolver and the value coercion.
+    const fallback = declared === "number" ? "number" : declared === "boolean" ? "boolean" : "string";
 
     if (binding.values === undefined || binding.values.kind === "identity") {
         return { type: fallback };
@@ -445,7 +475,11 @@ function spaceOf(
         return { type: fallback };
     }
     return {
-        type: resolved.options.every(o => typeof o.value === "number") ? "number" : "string",
+        type: resolved.options.every(o => typeof o.value === "number")
+            ? "number"
+            : resolved.options.every(o => typeof o.value === "boolean")
+              ? "boolean"
+              : "string",
         states: Object.fromEntries(resolved.options.map(o => [String(o.value), o.name])),
     };
 }
