@@ -131,7 +131,7 @@ function readDef(
  * @param source - View of the object tree
  * @returns The reason, or undefined when the reading is sound
  */
-function unhealthyReason(
+export function unhealthyReason(
     resource: ResourceId,
     snapshot: { readonly val: StateValue | null; readonly ack: boolean; readonly state: string },
     registry: Registry,
@@ -164,6 +164,29 @@ function unhealthyReason(
     }
 
     return undefined;
+}
+
+/**
+ * Whether a resource's owning adapter reports itself disconnected.
+ *
+ * Exported for action states, which have no reading to derive it from. A
+ * momentary button publishes no value at all, so `unhealthyReason` would answer
+ * "never-reported" for one — but "the adapter that owns this is down" is still
+ * true and still the most useful thing a panel can be told about a button.
+ *
+ * @param resource - Semantic resource id
+ * @param registry - The declared resources
+ * @param source - View of the object tree
+ * @returns True only when the owner explicitly reports false
+ */
+export function ownerOffline(resource: ResourceId, registry: Registry, source: ObjectSource): boolean {
+    const connection = registry.ownerConnection(resource);
+    if (connection === undefined) {
+        return false;
+    }
+    // Absent means a different convention, not offline — the same rule
+    // `unhealthyReason` follows, for the same reason.
+    return source.snapshotOf(connection)?.val === false;
 }
 
 /**

@@ -18,10 +18,10 @@
  * Pure, like the rest: it returns a description, and the adapter applies it.
  */
 
-import type { ActionDef, CapabilityId, ResourceId, Scene, StateValue } from "../model";
+import type { ActionDef, CapabilityId, ResourceId, Scene, StateValue, UnhealthyReason } from "../model";
 import type { ObjectSource } from "./resolver";
 import { optionsFor } from "./resolver";
-import { read } from "./feedback";
+import { ownerOffline, read, unhealthyReason } from "./feedback";
 import type { Registry } from "./registry";
 
 /** Root of the published tree, below the adapter's own namespace. */
@@ -118,25 +118,49 @@ export function objectsFor(registry: Registry, source: ObjectSource): ReadonlyAr
     // up front so the answer does not depend on declaration order.
     const declared = new Set(registry.allResources().map(r => `${ROOT}.${r.id}`));
 
+    /**
+     * Emits an object unless that id is already taken.
+     *
+     * The `declared` set below settles device-versus-folder, but it only ever
+     * covered folder scaffolding — a resource whose published base equals
+     * another resource's *channel* or its reserved `healthy` state still
+     * produced two objects with two types under one id, which is the
+     * rewrite-on-every-republish failure this function exists to avoid.
+     * Funnelling every emission through one gate makes "one id, one object" a
+     * property of the code rather than of the three places that remembered.
+     *
+     * First wins, and the order below puts the declared thing first.
+     *
+     * @param object - The object to emit
+     */
+    const emit = (object: PublishedObject): void => {
+        if (emitted.has(object.id)) {
+            return;
+        }
+        emitted.add(object.id);
+        objects.push(object);
+    };
+
     for (const resource of registry.allResources()) {
         // Every segment but the last is an organisational folder.
         const segments = resource.id.split(".");
         segments.slice(0, -1).forEach((_, index) => {
             const id = `${ROOT}.${segments.slice(0, index + 1).join(".")}`;
-            if (!emitted.has(id) && !declared.has(id)) {
-                emitted.add(id);
-                objects.push({ id, type: "folder", common: { name: segments[index]! } });
+            // `declared` still has to be consulted separately: the gate is
+            // first-wins, and a folder reached before the device that owns the
+            // same id would otherwise win it.
+            if (!declared.has(id)) {
+                emit({ id, type: "folder", common: { name: segments[index]! } });
             }
         });
 
         const base = `${ROOT}.${resource.id}`;
-        emitted.add(base);
-        objects.push({
+        emit({
             id: base,
             type: "device",
             common: { name: resource.name ?? resource.id, desc: `Owned by ${resource.owner}` },
         });
-        objects.push({
+        emit({
             id: `${base}.${HEALTH}`,
             type: "state",
             common: {
@@ -150,11 +174,11 @@ export function objectsFor(registry: Registry, source: ObjectSource): ReadonlyAr
         });
 
         for (const capability of resource.capabilities) {
-            objects.push({ id: `${base}.${capability.id}`, type: "channel", common: { name: capability.id } });
+            emit({ id: `${base}.${capability.id}`, type: "channel", common: { name: capability.id } });
 
             const feedbackIds = new Set(capability.feedback.map(f => f.id));
             for (const action of capability.actions) {
-                objects.push({
+                emit({
                     id: `${base}.${capability.id}.${action.id}`,
                     type: "state",
                     // A shared id means one read/write state; the registry has
@@ -166,7 +190,7 @@ export function objectsFor(registry: Registry, source: ObjectSource): ReadonlyAr
                 if (feedbackIds.has(feedback.id) && capability.actions.some(a => a.id === feedback.id)) {
                     continue;
                 }
-                objects.push({
+                emit({
                     id: `${base}.${capability.id}.${feedback.id}`,
                     type: "state",
                     common: {
@@ -230,7 +254,6 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
                 // point of marking the action state: a button has no feedback,
                 // so it is the only thing a panel can look at.
                 const unconfirmed = source.unconfirmed(action.binding.state);
-                allHealthy &&= !unconfirmed;
 
                 // A feedback sharing this action's id publishes as one
                 // read/write state, and the feedback branch below skips it to
@@ -251,21 +274,40 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
                 // bypassed by the next change. It already was once.
                 const merged = momentary ? undefined : capability.feedback.find(f => f.id === action.id);
                 const reading = merged ? read(resource.id, capability.id, merged.id, registry, source) : undefined;
-                if (merged) {
-                    allHealthy &&= reading?.healthy ?? false;
-                }
+
+                // An action state answers the health question too, and for much
+                // of the mapping it is the *only* state a panel binds:
+                // `atem.me1.program.source.select` is the writable one and the
+                // one carrying `common.states`, while its reading lives under a
+                // different id. Deriving quality from `unconfirmed` alone meant
+                // that selector published a stale `3` as good while the mixer's
+                // adapter was disconnected — and the reading beside it, bound to
+                // the very same device state, correctly said otherwise.
+                //
+                // A momentary trigger gets the narrower question, because it
+                // publishes no value: "never-reported" is not a fault in a
+                // button, but "the adapter that owns it is down" still is.
+                const reason: UnhealthyReason | undefined = merged
+                    ? reading?.healthy === true
+                        ? undefined
+                        : reading?.unhealthy
+                    : momentary
+                      ? ownerOffline(resource.id, registry, source)
+                          ? "owner-offline"
+                          : unconfirmed
+                            ? "unconfirmed"
+                            : undefined
+                      : snapshot
+                        ? unhealthyReason(resource.id, { ...snapshot, state: action.binding.state }, registry, source)
+                        : "unresolved";
+
+                allHealthy &&= reason === undefined;
 
                 states.push({
                     id: `${base}.${capability.id}.${action.id}`,
                     val: merged ? (reading?.raw ?? null) : (snapshot?.val ?? null),
                     ack: true,
-                    q: unconfirmed
-                        ? QUALITY.generalDeviceProblem
-                        : merged
-                          ? qualityOf(reading?.healthy === true ? undefined : reading?.unhealthy)
-                          : momentary || snapshot
-                            ? QUALITY.good
-                            : QUALITY.generalInstanceProblem,
+                    q: qualityOf(reason),
                 });
             }
 

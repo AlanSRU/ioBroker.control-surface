@@ -457,3 +457,64 @@ it("a boolean binding keeps its declared type rather than collapsing to string",
     assert.equal(common.type, "boolean");
     assert.equal(common.role, "switch", "a readable, writable boolean is a switch");
 });
+
+it("a readable action reports its owner being offline, not just an unconfirmed write", () => {
+    // For much of the mapping the action state is the only one a panel binds:
+    // atem.me1.program.source.select is the writable one and the one carrying
+    // common.states, while its reading lives under a different id. It published
+    // a stale value as good quality while the mixer's adapter was disconnected.
+    const offline = treeOf({
+        values: {
+            "blackmagic-atem.0.info.connection": false,
+            "blackmagic-atem.0.me0.programInput": 3,
+        },
+    });
+
+    const states = statesFor(registry, offline);
+    const select = states.find(s => s.id === `${ROOT}.atem.me1.program.source.select`);
+    assert.equal(select?.q, 0x12, "an offline owner is instance-not-connected");
+
+    // And a resource declaring no feedback at all is no longer healthy by
+    // default while its owner is down — room1.matrix has actions only.
+    const acmOffline = treeOf({ values: { "blustream-acm.0.info.connection": false } });
+    const healthy = statesFor(registry, acmOffline).find(s => s.id === `${ROOT}.room1.matrix.healthy`);
+    assert.equal(healthy?.val, false);
+});
+
+it("one id produces one object, whatever collides with what", () => {
+    // `declared` settled device-versus-folder but only covered folders: a
+    // resource whose base equals another's capability channel, or the reserved
+    // healthy state, still emitted two objects with two types under one id —
+    // which rewrites on every republish forever.
+    const collisions: ReadonlyArray<ReadonlyArray<string>> = [
+        ["room1", "room1.matrix"],
+        ["room1.matrix", "room1"],
+        ["display", "display.healthy"],
+        ["display.healthy", "display"],
+    ];
+
+    for (const ids of collisions) {
+        const { registry: local } = Registry.load(
+            ids.map(id => ({
+                id,
+                type: "t",
+                owner: "x.0",
+                capabilities: [
+                    {
+                        id: "matrix",
+                        actions: [{ kind: "set", id: "go", binding: { state: "x.0.y" }, value: true }],
+                        feedback: [],
+                    },
+                ],
+            })),
+            [],
+        );
+
+        const objects = objectsFor(local, empty);
+        const seen = new Set<string>();
+        for (const object of objects) {
+            assert.ok(!seen.has(object.id), `${ids.join(" + ")} emitted ${object.id} twice`);
+            seen.add(object.id);
+        }
+    }
+});
