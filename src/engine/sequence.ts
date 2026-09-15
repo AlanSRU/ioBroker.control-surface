@@ -204,6 +204,13 @@ async function runStep(
         case "abort":
         case "retry":
             return "failed";
+        default:
+            // Unreachable: `SceneBook.load` rejects an unknown policy kind. Kept
+            // because the alternative to a case matching is falling off the end
+            // returning undefined, which `runScene` reads as "carry on" — so the
+            // failure mode of forgetting a case here is a scene that ignores its
+            // own abort and reports success. Fail closed instead.
+            return "failed";
     }
 }
 

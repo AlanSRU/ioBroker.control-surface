@@ -389,3 +389,23 @@ it("a retry with no times is rejected rather than skipping the step", () => {
         [],
     );
 });
+
+it("an unknown failure policy is rejected rather than ignored", () => {
+    // runStep's switch matched no case, so it returned undefined, which runScene
+    // reads as neither done nor failed: the scene carried on through the steps
+    // it was meant to stop at and then reported itself completed.
+    const step = {
+        kind: "do",
+        invoke: { resource: "display.lobby", capability: "power", action: "on" },
+        onFailure: { kind: "stop" },
+    };
+    assert.match(reasonsFor([sceneOf("s", { steps: [step as never] })])[0]!, /unknown failure policy "stop"/);
+    assert.match(
+        reasonsFor([sceneOf("s", { onFailure: { kind: "halt" } as never })])[0]!,
+        /default failure policy has unknown failure policy "halt"/,
+    );
+    // The four real ones still load.
+    for (const onFailure of [{ kind: "abort" }, { kind: "continue" }, { kind: "retry", times: 1, delayMs: 10 }]) {
+        assert.deepEqual(reasonsFor([sceneOf("s", { onFailure: onFailure as never })]), []);
+    }
+});

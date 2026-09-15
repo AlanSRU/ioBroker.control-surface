@@ -80,11 +80,25 @@ it("the next deadline is the earliest, not the most recent", () => {
     log.arm("blackmagic-atem.0.me0.programInput", 1000, 2000);
     log.arm("samsungtv.0.meetingtv.state.power", 1100, 1500);
 
-    assert.equal(log.nextDeadline(), 2600, "the TV's deadline is sooner than the mixer's");
+    assert.equal(log.nextDeadline(1200), 2600, "the TV's deadline is sooner than the mixer's");
 
     log.observed("samsungtv.0.meetingtv.state.power", true);
-    assert.equal(log.nextDeadline(), 3000, "the mixer's deadline survives the TV's confirmation");
+    assert.equal(log.nextDeadline(1200), 3000, "the mixer's deadline survives the TV's confirmation");
 
     log.observed("blackmagic-atem.0.me0.programInput", true);
-    assert.equal(log.nextDeadline(), undefined);
+    assert.equal(log.nextDeadline(1200), undefined);
+});
+
+it("a lapsed write does not keep arming the timer", () => {
+    // It stays pending so the control keeps reporting as broken, but arming for
+    // a deadline already in the past is Math.max(0, negative) + 100 — which
+    // re-armed every 100ms for the life of the instance, logging the same
+    // warning ten times a second for exactly the condition being detected.
+    const log = new WriteLog();
+    log.arm("blackmagic-atem.0.me0.programInput", 1000, 2000);
+
+    assert.equal(log.nextDeadline(1500), 3000, "still ahead, so still worth waiting for");
+    assert.deepEqual(log.lapsed(3500), ["blackmagic-atem.0.me0.programInput"]);
+    assert.equal(log.nextDeadline(3500), undefined, "overdue, so nothing left to wait for");
+    assert.equal(log.unconfirmed("blackmagic-atem.0.me0.programInput", 3500), true, "still reported as broken");
 });

@@ -644,7 +644,7 @@ class ControlSurface extends utils.Adapter {
             this.clearTimeout(this.confirmTimer);
             this.confirmTimer = undefined;
         }
-        const deadline = this.writes.nextDeadline();
+        const deadline = this.writes.nextDeadline(Date.now());
         if (deadline === undefined) {
             return;
         }

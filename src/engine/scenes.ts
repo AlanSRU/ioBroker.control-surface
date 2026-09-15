@@ -193,6 +193,9 @@ function stepProblems(
     return faults;
 }
 
+/** The failure policies `runStep` knows how to carry out. */
+const POLICY_KINDS = new Set(["abort", "continue", "retry", "fallback"]);
+
 /**
  * Checks a failure policy's own numbers.
  *
@@ -206,7 +209,19 @@ function stepProblems(
  * @returns One fault per problem
  */
 function policyProblems(policy: FailurePolicy | undefined, at: string): string[] {
-    if (policy?.kind !== "retry") {
+    if (policy === undefined) {
+        return [];
+    }
+    if (!POLICY_KINDS.has(policy.kind)) {
+        // `runStep` switches on this and every case returns. An unknown kind
+        // matched none, so the function fell off the end returning undefined —
+        // which `runScene` reads as neither "done" nor "failed", so the scene
+        // carried on through the steps the author meant it to stop at, and then
+        // reported itself completed. The most permissive outcome available,
+        // from a typo.
+        return [`${at} has unknown failure policy "${String(policy.kind)}"`];
+    }
+    if (policy.kind !== "retry") {
         return [];
     }
 

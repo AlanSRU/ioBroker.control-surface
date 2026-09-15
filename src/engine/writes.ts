@@ -86,12 +86,21 @@ export class WriteLog {
      * whose whole purpose is to catch a write that produces no state change
      * cannot rely on another state changing to wake it.
      *
-     * @returns The earliest deadline, or undefined when nothing is pending
+     * @param now - The current time
+     * @returns The earliest deadline still ahead, or undefined when there is none
      */
-    nextDeadline(): number | undefined {
+    nextDeadline(now: number): number | undefined {
         let earliest: number | undefined;
         for (const deadline of this.pending.values()) {
-            if (earliest === undefined || deadline < earliest) {
+            // Strictly in the future. A lapsed write stays in `pending` on
+            // purpose, so that `unconfirmed` keeps reporting the control as
+            // broken until the device finally answers — but it must not drive
+            // the timer, or arming for "the earliest deadline" arms for one
+            // already in the past, which is `Math.max(0, negative) + 100`. The
+            // adapter then re-armed every 100ms for the life of the instance,
+            // logging the same warning ten times a second and republishing with
+            // it, for exactly the condition the detector exists to report.
+            if (deadline > now && (earliest === undefined || deadline < earliest)) {
                 earliest = deadline;
             }
         }

@@ -365,3 +365,41 @@ it("capability, action and feedback ids are charset-checked like resource ids", 
         assert.equal(problems.length, 1, `expected "${capabilityId}" to be rejected`);
     }
 });
+
+it("a set with no value and a level with a bad step are rejected", () => {
+    // Both reached live equipment: the first as {val: undefined}, which
+    // js-controller does not refuse, and the second as NaN out of quantise —
+    // and in both cases plan reported the write as a success.
+    const noValue = resourceOf({
+        id: "a.b",
+        capabilities: [
+            { id: "power", actions: [{ kind: "set", id: "on", binding: { state: "x.0.y" } }], feedback: [] },
+        ],
+    } as unknown as Partial<Resource>);
+    assert.match(Registry.load([noValue], []).problems[0]!.reason, /set with no value/);
+
+    const badStep = resourceOf({
+        id: "a.b",
+        capabilities: [
+            {
+                id: "volume",
+                actions: [{ kind: "level", id: "set", binding: { state: "x.0.y" }, min: 0, max: 100, step: "half" }],
+                feedback: [],
+            },
+        ],
+    } as unknown as Partial<Resource>);
+    assert.match(Registry.load([badStep], []).problems[0]!.reason, /step that is not a positive number/);
+
+    // `false` and `0` are values, not omissions.
+    const falseValue = resourceOf({
+        id: "a.b",
+        capabilities: [
+            {
+                id: "power",
+                actions: [{ kind: "set", id: "off", binding: { state: "x.0.y" }, value: false }],
+                feedback: [],
+            },
+        ],
+    } as unknown as Partial<Resource>);
+    assert.deepEqual(Registry.load([falseValue], []).problems, []);
+});

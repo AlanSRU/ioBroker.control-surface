@@ -64,6 +64,9 @@ const ACTION_KINDS = new Set(["set", "toggle", "level", "select", "route"]);
 /** The presentations the publisher knows how to type and give a role to. */
 const PRESENTATIONS = new Set(["boolean", "number", "text", "selection"]);
 
+/** What a device state can hold, so what a declared `set` value may be. */
+const SCALARS = new Set(["boolean", "number", "string"]);
+
 /** Rejects `a..b`, a leading `.` and a trailing `.`, which make empty segments. */
 const EMPTY_SEGMENT = /(^\.)|(\.\.)|(\.$)/;
 
@@ -425,6 +428,29 @@ function validateCapabilities(
                 problems.push({
                     where,
                     reason: `action "${capability.id}.${action.id}" has unknown kind "${String(action.kind)}"`,
+                });
+            }
+            if (action.kind === "set" && !SCALARS.has(typeof action.value)) {
+                // A `set` carries its value in the declaration, and `valueFor`
+                // hands it straight back. Omitted, it reached the device as
+                // `{val: undefined}` — which js-controller does not refuse,
+                // because its guard only rejects a state object with no keys at
+                // all — while `plan` reported the write as a success.
+                problems.push({
+                    where,
+                    reason: `action "${capability.id}.${action.id}" is a set with no value to write`,
+                });
+            }
+            if (
+                action.kind === "level" &&
+                action.step !== undefined &&
+                !(typeof action.step === "number" && Number.isFinite(action.step) && action.step > 0)
+            ) {
+                // `step <= 0` is false for a string, so `"step": "half"` passed
+                // and `quantise` divided by it: NaN, sent to the device.
+                problems.push({
+                    where,
+                    reason: `action "${capability.id}.${action.id}" has a step that is not a positive number`,
                 });
             }
             if (action.kind === "level" && !(typeof action.min === "number" && typeof action.max === "number")) {
