@@ -412,6 +412,22 @@ function validateCapabilities(
                         `states ("${action.binding.state}" and "${twin.binding.state}"); give one of them another id`,
                 });
             }
+            // ...but only a *readable* action can merge. `set` and `toggle`
+            // publish as write-only buttons, because `power.on` is an
+            // instruction and not a question, and one object id cannot be both
+            // a write-only button and a readable reading. Merging them silently
+            // published the device's value into a boolean button and dropped
+            // the feedback's own state entirely, so the declared reading simply
+            // did not appear.
+            if (twin && (action.kind === "set" || action.kind === "toggle")) {
+                problems.push({
+                    where,
+                    reason:
+                        `"${capability.id}.${action.id}" is both a ${action.kind} action and a feedback, but a ` +
+                        `momentary trigger publishes write-only and cannot carry a reading; give one of them ` +
+                        `another id`,
+                });
+            }
         }
 
         const seenActions = new Set<string>();

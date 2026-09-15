@@ -245,7 +245,11 @@ export function statesFor(registry: Registry, source: ObjectSource): ReadonlyArr
                 // published a stale route as good quality with `healthy` true
                 // while its adapter was down, which is precisely the "control
                 // that looks live" failure the feedback engine exists to stop.
-                const merged = capability.feedback.find(f => f.id === action.id);
+                // `!momentary` as well as the registry's refusal above: a
+                // write-only button must never be given a value, and a guard
+                // that depends on validation elsewhere is the kind that gets
+                // bypassed by the next change. It already was once.
+                const merged = momentary ? undefined : capability.feedback.find(f => f.id === action.id);
                 const reading = merged ? read(resource.id, capability.id, merged.id, registry, source) : undefined;
                 if (merged) {
                     allHealthy &&= reading?.healthy ?? false;

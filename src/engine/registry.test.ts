@@ -403,3 +403,40 @@ it("a set with no value and a level with a bad step are rejected", () => {
     } as unknown as Partial<Resource>);
     assert.deepEqual(Registry.load([falseValue], []).problems, []);
 });
+
+it("a momentary action may not share an id with a feedback", () => {
+    // One object id cannot be both a write-only button and a readable reading.
+    // Merging them published the device's value into a boolean button — the
+    // regression the momentary guard exists to stop — and dropped the
+    // feedback's own state, so the declared reading never appeared at all.
+    for (const kind of ["set", "toggle"] as const) {
+        const resource = resourceOf({
+            id: "a.b",
+            capabilities: [
+                {
+                    id: "preset",
+                    actions: [{ kind, id: "preset", binding: { state: "amp.0.preset" }, value: 3 }],
+                    feedback: [{ id: "preset", binding: { state: "amp.0.preset" }, presentation: "number" }],
+                },
+            ],
+        } as unknown as Partial<Resource>);
+
+        const { problems } = Registry.load([resource], []);
+        assert.equal(problems.length, 1, `expected a ${kind} twin to be rejected`);
+        assert.match(problems[0]!.reason, /momentary trigger publishes write-only/);
+    }
+
+    // A readable action still merges — routing.video is the route and the
+    // reading of it, and that is the whole point of allowing a shared id.
+    const readable = resourceOf({
+        id: "a.b",
+        capabilities: [
+            {
+                id: "routing",
+                actions: [{ kind: "route", id: "video", binding: { state: "acm.0.rx3.videoRoute" }, layer: "video" }],
+                feedback: [{ id: "video", binding: { state: "acm.0.rx3.videoRoute" }, presentation: "selection" }],
+            },
+        ],
+    } as unknown as Partial<Resource>);
+    assert.deepEqual(Registry.load([readable], []).problems, []);
+});
