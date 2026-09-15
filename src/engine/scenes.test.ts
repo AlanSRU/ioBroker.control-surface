@@ -409,3 +409,26 @@ it("an unknown failure policy is rejected rather than ignored", () => {
         assert.deepEqual(reasonsFor([sceneOf("s", { onFailure: onFailure as never })]), []);
     }
 });
+
+it("a null failure policy costs that scene and not the book", () => {
+    // JSON has no undefined, so "onFailure": null is what a person writes to
+    // mean "no policy". Indexing it threw out of SceneBook.load, which the
+    // adapter catches by continuing with no scenes at all — one null emptied
+    // the whole book and every scene button in the venue went dead.
+    const withNullStep = sceneOf("bad.step", {
+        steps: [
+            {
+                kind: "do",
+                invoke: { resource: "display.lobby", capability: "power", action: "on" },
+                onFailure: null,
+            } as never,
+        ],
+    });
+    const withNullDefault = sceneOf("bad.default", { onFailure: null as never });
+    const good = sceneOf("keeps.working");
+
+    const { book, problems } = SceneBook.load([withNullStep, withNullDefault, good], registry);
+    assert.equal(problems.length, 2);
+    assert.ok(book.get("keeps.working"), "the other scenes survive");
+    assert.equal(book.all().length, 1);
+});

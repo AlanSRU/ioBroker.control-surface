@@ -489,3 +489,66 @@ it("a settleMs that is not a duration is rejected", () => {
     assert.equal(problems.length, 1);
     assert.match(problems[0]!.reason, /settleMs that/);
 });
+
+it("a value table that is not an array of pairs is rejected", () => {
+    // `.length` on an object is undefined, which is not 0, so a table written
+    // as a JSON map — the obvious reading of "explicit pairs, name to value" —
+    // loaded cleanly and then threw entries.map out of the first publish().
+    const bad: ReadonlyArray<unknown> = [
+        { "Camera 1": 1, "Camera 2": 2 },
+        "HDMI",
+        [null],
+        [{ name: "Camera 1" }],
+        [{ value: 1 }],
+        [{ name: "Camera 1", value: {} }],
+    ];
+
+    for (const entries of bad) {
+        const resource = resourceOf({
+            id: "a.b",
+            capabilities: [
+                {
+                    id: "source",
+                    actions: [],
+                    feedback: [
+                        {
+                            id: "source",
+                            binding: { state: "x.0.y", values: { kind: "table", entries } },
+                            presentation: "selection",
+                        },
+                    ],
+                },
+            ],
+        } as unknown as Partial<Resource>);
+
+        const { problems } = Registry.load([resource], []);
+        assert.equal(problems.length, 1, `expected ${JSON.stringify(entries)} to be rejected`);
+    }
+});
+
+it("a jsonList path that is not a string is rejected", () => {
+    // `path.split` throws on an array or a number, by the same route.
+    for (const path of [["pages"], 0, {}]) {
+        const resource = resourceOf({
+            id: "a.b",
+            capabilities: [
+                {
+                    id: "navigation",
+                    actions: [],
+                    feedback: [
+                        {
+                            id: "page",
+                            binding: {
+                                state: "streamdeck.0.decks.d.currentPageId",
+                                values: { kind: "jsonList", state: "streamdeck.0.decks.d.layoutJson", path },
+                            },
+                            presentation: "selection",
+                        },
+                    ],
+                },
+            ],
+        } as unknown as Partial<Resource>);
+
+        assert.match(Registry.load([resource], []).problems[0]!.reason, /jsonList path that is not a string/);
+    }
+});

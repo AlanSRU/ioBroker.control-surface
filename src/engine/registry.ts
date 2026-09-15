@@ -613,7 +613,7 @@ function bindingProblems(
     }
 
     const values = binding.values as
-        { kind?: string; collection?: string; entries?: unknown[]; state?: string } | undefined;
+        { kind?: string; collection?: string; entries?: unknown; state?: string } | undefined;
     if (values?.kind === "jsonList") {
         // Checked here rather than left to resolve as "no document": a state id
         // that is missing or semantic can never resolve, so it is a
@@ -634,8 +634,42 @@ function bindingProblems(
             });
         }
     }
-    if (values?.kind === "table" && (!values.entries || values.entries.length === 0)) {
-        problems.push({ where, reason: `"${what}" declares an empty value table` });
+    if (values?.kind === "table") {
+        // By type, then by length. `.length` on an object is undefined, which is
+        // not 0, so a table written as a JSON *map* — the obvious reading of
+        // "explicit pairs, semantic name to device value" — loaded with no
+        // problem at all and then threw `entries.map is not a function` out of
+        // the first `publish()` that `onReady` awaits. Nothing published,
+        // nothing subscribed, and a restart into the same configuration: the
+        // same loop the kind check above prevents, reached through the payload
+        // instead of the discriminant.
+        const entries: unknown = values.entries;
+        if (!Array.isArray(entries)) {
+            problems.push({
+                where,
+                reason: `"${what}" declares a value table that is not an array of {name, value} pairs`,
+            });
+        } else if (entries.length === 0) {
+            problems.push({ where, reason: `"${what}" declares an empty value table` });
+        } else {
+            const bad = entries.findIndex(
+                entry => !isObject(entry) || typeof entry.name !== "string" || !SCALARS.has(typeof entry.value),
+            );
+            if (bad >= 0) {
+                problems.push({ where, reason: `"${what}" value table entry ${bad + 1} is not a {name, value} pair` });
+            }
+        }
+    }
+
+    if (values?.kind === "jsonList") {
+        // The same shape one field over: `path.split` throws on an array or a
+        // number, by the same route and with the same outcome.
+        for (const key of ["path", "valueKey", "nameKey"] as const) {
+            const field = (values as Record<string, unknown>)[key];
+            if (field !== undefined && typeof field !== "string") {
+                problems.push({ where, reason: `"${what}" has a jsonList ${key} that is not a string` });
+            }
+        }
     }
 
     // The one configured duration that reaches a timer outside a scene.

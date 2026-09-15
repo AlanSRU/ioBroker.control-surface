@@ -212,14 +212,20 @@ function policyProblems(policy: FailurePolicy | undefined, at: string): string[]
     if (policy === undefined) {
         return [];
     }
-    if (!POLICY_KINDS.has(policy.kind)) {
+    // `null`, not just `undefined`. JSON has no `undefined`, so `"onFailure":
+    // null` is what a person or a generator writes to mean "no policy" — and
+    // indexing it threw out of SceneBook.load, which the adapter catches by
+    // continuing with *no scenes at all*. One null in one scene emptied the
+    // whole book and every scene button in the venue went dead, which is the
+    // opposite of the per-scene rule this module is built on.
+    if (!isObject(policy) || !POLICY_KINDS.has(policy.kind)) {
         // `runStep` switches on this and every case returns. An unknown kind
         // matched none, so the function fell off the end returning undefined —
         // which `runScene` reads as neither "done" nor "failed", so the scene
         // carried on through the steps the author meant it to stop at, and then
         // reported itself completed. The most permissive outcome available,
         // from a typo.
-        return [`${at} has unknown failure policy "${String(policy.kind)}"`];
+        return [`${at} has unknown failure policy ${JSON.stringify(isObject(policy) ? policy.kind : policy)}`];
     }
     if (policy.kind !== "retry") {
         return [];
