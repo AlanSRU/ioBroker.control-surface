@@ -16,7 +16,7 @@
  * This module does the first. `sequence.ts` does the second.
  */
 
-import type { Scene, SequenceStep } from "../model";
+import type { FailurePolicy, Scene, SequenceStep } from "../model";
 import type { Registry, RegistryProblem } from "./registry";
 import { idProblem } from "./registry";
 
@@ -76,6 +76,7 @@ export class SceneBook {
             if (scene.onFailure?.kind === "fallback" && !byId.has(scene.onFailure.scene)) {
                 faults.push(`default failure policy falls back to unknown scene "${scene.onFailure.scene}"`);
             }
+            faults.push(...policyProblems(scene.onFailure, "default failure policy"));
             const cycle = cycleThrough(scene.id, byId, [scene.id]);
             if (cycle) {
                 faults.push(`is part of a scene cycle: ${cycle.join(" -> ")}`);
@@ -186,17 +187,42 @@ function stepProblems(
         if (onFailure?.kind === "fallback" && !known.has(onFailure.scene)) {
             faults.push(`${at} falls back to unknown scene "${onFailure.scene}"`);
         }
-        if (onFailure?.kind === "retry" && onFailure.times < 1) {
-            faults.push(`${at} retries ${onFailure.times} times`);
-        }
-        if (onFailure?.kind === "retry") {
-            const bad = durationProblem(onFailure.delayMs);
-            if (bad) {
-                faults.push(`${at} retries after a delay that ${bad}`);
-            }
-        }
+        faults.push(...policyProblems(onFailure, at));
     });
 
+    return faults;
+}
+
+/**
+ * Checks a failure policy's own numbers.
+ *
+ * Shared by the per-step policies and a scene's default, because
+ * `attemptStep` reaches for whichever of the two applies and cannot tell them
+ * apart afterwards — so a default that only the scene declares has to be
+ * checked just as closely as one written on a step.
+ *
+ * @param policy - The declared policy, if any
+ * @param at - Where to say the fault is
+ * @returns One fault per problem
+ */
+function policyProblems(policy: FailurePolicy | undefined, at: string): string[] {
+    if (policy?.kind !== "retry") {
+        return [];
+    }
+
+    const faults: string[] = [];
+    // Checked by type, not by comparison — the same trap as a level's min/max.
+    // `undefined < 1` is false, so a retry with no `times` loaded cleanly and
+    // then computed `policy.times + 1` as NaN; `attempt < NaN` is false, so the
+    // step never ran at all. A step meant to switch a projector silently did
+    // nothing, and the run recorded a failure whose reason was undefined.
+    if (typeof policy.times !== "number" || !Number.isFinite(policy.times) || policy.times < 1) {
+        faults.push(`${at} retries ${JSON.stringify(policy.times)} times`);
+    }
+    const bad = durationProblem(policy.delayMs);
+    if (bad) {
+        faults.push(`${at} retries after a delay that ${bad}`);
+    }
     return faults;
 }
 

@@ -353,3 +353,39 @@ it("a malformed scene is dropped without taking the others down", () => {
         assert.ok(book.get("keeps.working"), `expected ${what} not to take the other scene down`);
     }
 });
+
+it("a retry with no times is rejected rather than skipping the step", () => {
+    // `undefined < 1` is false, so this loaded cleanly and then computed
+    // `policy.times + 1` as NaN. `attempt < NaN` is false, so the step never ran
+    // at all: a step meant to switch a projector silently did nothing, and the
+    // run recorded a failure whose reason was undefined.
+    const step = {
+        kind: "do",
+        invoke: { resource: "display.lobby", capability: "power", action: "on" },
+        onFailure: { kind: "retry", delayMs: 1000 },
+    };
+    assert.match(reasonsFor([sceneOf("s", { steps: [step as never] })])[0]!, /retries undefined times/);
+
+    // A scene's default policy reaches exactly the same code, so it is checked
+    // exactly as closely.
+    assert.match(
+        reasonsFor([sceneOf("s", { onFailure: { kind: "retry", delayMs: 1000 } as never })])[0]!,
+        /default failure policy retries undefined times/,
+    );
+
+    // A well-formed retry still loads.
+    assert.deepEqual(
+        reasonsFor([
+            sceneOf("s", {
+                steps: [
+                    {
+                        kind: "do",
+                        invoke: { resource: "display.lobby", capability: "power", action: "on" },
+                        onFailure: { kind: "retry", times: 2, delayMs: 1000 },
+                    },
+                ],
+            }),
+        ]),
+        [],
+    );
+});
